@@ -9,7 +9,7 @@ server {
     error_log  /var/log/nginx/correspondence.error.log;
 
     location /static/ {
-        alias /opt/correspondence-cms/app/staticfiles/;
+        alias @BASE_DIR@/app/staticfiles/;
         access_log off;
         expires 7d;
     }

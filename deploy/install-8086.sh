@@ -50,7 +50,7 @@ chown -R "$APP_USER":"$APP_USER" "$BASE_DIR" "$MEDIA_DIR"
 if [ -z "$DB_PASSWORD" ]; then
   if [ -f "$ENV_FILE" ] && grep -q '^DB_PASSWORD=' "$ENV_FILE"; then
     # Reuse the password already provisioned on a prior run.
-    DB_PASSWORD="$(sed -n "s/^DB_PASSWORD=//p" "$ENV_FILE" | head -1 | sed "s/^'//;s/'\$//")"
+    DB_PASSWORD="$(sed -n "s/^DB_PASSWORD=\"//p" "$ENV_FILE" | head -1 | sed 's/\"$//')"
   else
     DB_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
     log "Generated a random DB_PASSWORD (saved to $ENV_FILE)"
@@ -63,6 +63,13 @@ if [ "$DB_USER_EXISTS" != "1" ]; then
   sudo -u postgres psql -v ON_ERROR_STOP=1 -c \
     "CREATE USER \"$DB_USER\" WITH PASSWORD '$(printf '%s' "$DB_PASSWORD" | sed "s/'/''/g")';"
 else
+  if [ -z "$DB_PASSWORD" ] && [ ! -f "$ENV_FILE" ]; then
+    echo "PostgreSQL role $DB_USER exists but password is unknown (no .env file to reuse password from)." >&2
+    echo "Either:" >&2
+    echo "  1. Provide DB_PASSWORD=<password> when rerunning (must match the existing role's password)" >&2
+    echo "  2. Drop the existing role and let the installer recreate it" >&2
+    exit 1
+  fi
   log "PostgreSQL role $DB_USER already exists; leaving its password untouched"
 fi
 DB_EXISTS="$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'")"
@@ -76,12 +83,12 @@ fi
 # --- 3. Clone and install the application ---------------------------------
 if [ -d "$SRC_DIR/.git" ]; then
   log "Updating existing clone at $SRC_DIR"
-  git -C "$SRC_DIR" fetch --prune origin "$BRANCH"
-  git -C "$SRC_DIR" checkout -q "$BRANCH"
-  git -C "$SRC_DIR" reset -q --hard "origin/$BRANCH"
+  sudo -u "$APP_USER" git -C "$SRC_DIR" fetch --prune origin "$BRANCH"
+  sudo -u "$APP_USER" git -C "$SRC_DIR" checkout -q "$BRANCH"
+  sudo -u "$APP_USER" git -C "$SRC_DIR" reset -q --hard "origin/$BRANCH"
 else
   log "Cloning $REPO_URL into $SRC_DIR"
-  git clone --branch "$BRANCH" "$REPO_URL" "$SRC_DIR"
+  sudo -u "$APP_USER" git clone --branch "$BRANCH" "$REPO_URL" "$SRC_DIR"
 fi
 
 log "Syncing $SRC_DIR -> $APP_DIR"
@@ -94,7 +101,6 @@ fi
 "$VENV_DIR/bin/pip" install --upgrade pip
 "$VENV_DIR/bin/pip" install -r "$APP_DIR/requirements.txt"
 
-git -C "$SRC_DIR" rev-parse HEAD | tee "$BASE_DIR/.deployed_commit" >/dev/null
 chown -R "$APP_USER":"$APP_USER" "$BASE_DIR"
 
 # --- 4. Environment file ---------------------------------------------------
@@ -103,14 +109,14 @@ if [ ! -f "$ENV_FILE" ]; then
   SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(64))')"
   install -m 640 -o root -g "$APP_USER" /dev/null "$ENV_FILE"
   {
-    # Single-quote every value: it is safe even when the value contains $, ", or spaces,
-    # because this file is sourced by bash (`set -a; . "$ENV_FILE"`).
-    printf "DJANGO_SECRET_KEY='%s'\n" "$(printf '%s' "$SECRET_KEY" | sed "s/'/'\\\\''/g")"
+    # Double-quote every value: escape backslashes, double quotes, dollar signs, and backticks
+    # so both bash and systemd's EnvironmentFile parser receive the original value.
+    printf "DJANGO_SECRET_KEY=\"%s\"\n" "$(printf '%s' "$SECRET_KEY" | sed 's/[\\\"$`]/\\&/g')"
     printf "DJANGO_DEBUG=0\n"
-    printf "DJANGO_ALLOWED_HOSTS='%s'\n" "$ALLOWED_HOSTS"
-    printf "DB_NAME='%s'\n" "$DB_NAME"
-    printf "DB_USER='%s'\n" "$DB_USER"
-    printf "DB_PASSWORD='%s'\n" "$(printf '%s' "$DB_PASSWORD" | sed "s/'/'\\\\''/g")"
+    printf "DJANGO_ALLOWED_HOSTS=\"%s\"\n" "$ALLOWED_HOSTS"
+    printf "DB_NAME=\"%s\"\n" "$DB_NAME"
+    printf "DB_USER=\"%s\"\n" "$DB_USER"
+    printf "DB_PASSWORD=\"%s\"\n" "$(printf '%s' "$DB_PASSWORD" | sed 's/[\\\"$`]/\\&/g')"
     printf "DB_HOST=127.0.0.1\n"
     printf "DB_PORT=5432\n"
     printf "MEDIA_ROOT=%s\n" "$MEDIA_DIR"
@@ -140,9 +146,13 @@ fi
 
 # --- 6. Gunicorn service -----------------------------------------------
 log "Installing systemd service"
-cp "$APP_DIR/deploy/correspondence-8086.service" /etc/systemd/system/correspondence.service
+{
+  sed "s|@BASE_DIR@|$BASE_DIR|g; s|@APP_USER@|$APP_USER|g; s|@MEDIA_DIR@|$MEDIA_DIR|g" \
+    "$APP_DIR/deploy/correspondence-8086.service"
+} > /etc/systemd/system/correspondence.service
 systemctl daemon-reload
 systemctl enable --now correspondence
+systemctl restart correspondence
 sleep 2
 systemctl is-active --quiet correspondence || {
   echo "correspondence service failed to start; check: journalctl -u correspondence -n 50" >&2
@@ -151,16 +161,25 @@ systemctl is-active --quiet correspondence || {
 
 # --- 7. Nginx on port 8086 --------------------------------------------
 log "Installing nginx site"
-cp "$APP_DIR/deploy/nginx-8086.conf.example" /etc/nginx/sites-available/correspondence
-ln -sf /etc/nginx/sites-available/correspondence /etc/nginx/sites-enabled/correspondence
-nginx -t
-systemctl reload nginx
+if [ ! -f /etc/nginx/sites-available/correspondence ]; then
+  {
+    sed "s|@BASE_DIR@|$BASE_DIR|g" "$APP_DIR/deploy/nginx-8086.conf.example"
+  } > /etc/nginx/sites-available/correspondence
+  ln -sf /etc/nginx/sites-available/correspondence /etc/nginx/sites-enabled/correspondence
+  nginx -t
+  systemctl reload nginx
+else
+  log "/etc/nginx/sites-available/correspondence already exists; preserving it"
+fi
 
 if [ -n "$LAN_SUBNET" ] && command -v ufw >/dev/null 2>&1; then
   log "Allowing TCP/8086 from $LAN_SUBNET via ufw"
   ufw allow from "$LAN_SUBNET" to any port 8086 proto tcp
   ufw reload
 fi
+
+# Record deployment success: all steps and health checks have passed.
+sudo -u "$APP_USER" git -C "$SRC_DIR" rev-parse HEAD | tee "$BASE_DIR/.deployed_commit" >/dev/null
 
 log "Done. Verify with:"
 log "  systemctl is-active correspondence nginx"
