@@ -16,6 +16,11 @@ STATE_FILE="$BASE_DIR/.deployed_commit"
 
 log() { printf '[update] %s\n' "$*"; }
 
+# This script runs as root while $SRC_DIR is owned by the app user, which trips
+# git's "dubious ownership" check. Scope the exception to this clone only
+# ("command" scope counts as protected configuration, so git honours it).
+git() { command git -c "safe.directory=$SRC_DIR" "$@"; }
+
 [ -d "$SRC_DIR/.git" ] || { echo "No git clone at $SRC_DIR" >&2; exit 1; }
 [ -d "$APP_DIR" ] || { echo "No live app directory at $APP_DIR (run the initial install first)" >&2; exit 1; }
 
@@ -30,7 +35,7 @@ if [ -z "$OLD_COMMIT" ]; then
 No deployed commit recorded in $STATE_FILE.
 This script only copies incremental changes. After the initial install, record
 the installed commit once with:
-  git -C "$SRC_DIR" rev-parse HEAD | sudo tee "$STATE_FILE"
+  sudo git -C "$SRC_DIR" -c safe.directory="$SRC_DIR" rev-parse HEAD | sudo tee "$STATE_FILE"
 EOF
   exit 1
 fi
