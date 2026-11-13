@@ -73,6 +73,8 @@ Recommended: run `sudo ./deploy/install-8086.sh` on a fresh Ubuntu 22.04/24.04 L
 
 For the full manual walkthrough (useful to understand or customize each step) serving the site on port 8086 (Nginx 8086 -> Gunicorn 127.0.0.1:8087), see `deploy/UBUNTU_DEPLOY_8086.md`, with `deploy/correspondence-8086.service`, `deploy/nginx-8086.conf.example` and the incremental updater `deploy/update-from-github.sh`.
 
+To pull updated files from GitHub later, run `./update.sh` in the checkout (add `sudo ... --deploy` to also update `/opt/correspondence-cms` and restart the service). See `deploy/UBUNTU_DEPLOY_8086.md` section 9.
+
 Legacy simple alternative: `deploy/ubuntu-install.sh` (base packages + PostgreSQL only) with `deploy/correspondence.service` and `deploy/nginx.conf.example` (plain `/opt/correspondence-cms` layout, port 8001, no atomic app/src split). Replace the example LAN IP/hostname and set a firewall rule allowing TCP/80 only from the office subnet. Add internal HTTPS if credentials or sensitive records cross shared networks.
 
 ## Known next steps
