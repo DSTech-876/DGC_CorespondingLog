@@ -74,14 +74,18 @@ Generate a key with:
 
 Because the site is reached on a non-standard port, `DJANGO_ALLOWED_HOSTS`
 entries stay host-only (no port) — Django strips the port when validating.
+Loopback plus this server's own hostname and IPv4 addresses are allowed
+automatically; a host missing from the list is what produces `Bad Request (400)`.
+CSRF origins are derived from the allowed hosts for ports `8000,8001,8086`
+(override via `DJANGO_SITE_PORTS` or `DJANGO_CSRF_TRUSTED_ORIGINS`).
 
-## 5. Migrate, create admin, collect static
+## 5. Migrate, seed admin, collect static
 
 ```bash
 set -a; . /etc/correspondence-cms.env; set +a
 cd /opt/correspondence-cms/app
 sudo -u correspondence --preserve-env /opt/correspondence-cms/venv/bin/python manage.py migrate
-sudo -u correspondence --preserve-env /opt/correspondence-cms/venv/bin/python manage.py createsuperuser
+sudo -u correspondence --preserve-env /opt/correspondence-cms/venv/bin/python manage.py seed_admin
 sudo -u correspondence --preserve-env /opt/correspondence-cms/venv/bin/python manage.py collectstatic --noinput
 ```
 

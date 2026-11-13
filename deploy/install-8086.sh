@@ -20,10 +20,30 @@ APP_USER="${APP_USER:-correspondence}"
 DB_NAME="${DB_NAME:-correspondence_db}"
 DB_USER="${DB_USER:-correspondence_user}"
 DB_PASSWORD="${DB_PASSWORD:-}"
-ALLOWED_HOSTS="${ALLOWED_HOSTS:-127.0.0.1,localhost}"
+ALLOWED_HOSTS="${ALLOWED_HOSTS:-}"
 LAN_SUBNET="${LAN_SUBNET:-}"
 
 log() { printf '[install] %s\n' "$*"; }
+
+# Hosts the server actually answers on; a missing LAN IP here is the usual
+# cause of "Bad Request (400)" when browsing to http://<lan-ip>:8086/.
+detect_hosts() {
+  local hosts="127.0.0.1,localhost"
+  local ip
+  for ip in $(hostname -I 2>/dev/null); do
+    case "$ip" in *:*) continue ;; esac
+    hosts="$hosts,$ip"
+  done
+  local name
+  name="$(hostname -s 2>/dev/null || true)"
+  [ -n "$name" ] && hosts="$hosts,$name,$name.local"
+  printf '%s' "$hosts"
+}
+
+if [ -z "$ALLOWED_HOSTS" ]; then
+  ALLOWED_HOSTS="$(detect_hosts)"
+  log "Detected DJANGO_ALLOWED_HOSTS=$ALLOWED_HOSTS"
+fi
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run as root, e.g.: sudo ./deploy/install-8086.sh" >&2
@@ -124,7 +144,26 @@ if [ ! -f "$ENV_FILE" ]; then
   chmod 640 "$ENV_FILE"
   chown root:"$APP_USER" "$ENV_FILE"
 else
-  log "$ENV_FILE already exists; leaving it untouched (edit DJANGO_ALLOWED_HOSTS manually if needed)"
+  # Re-runs must still repair a host list that is missing this server's LAN IP,
+  # which Django rejects with "Bad Request (400)".
+  CURRENT_HOSTS="$(sed -n 's/^DJANGO_ALLOWED_HOSTS="\{0,1\}\(.*\)/\1/p' "$ENV_FILE" | head -1 | sed 's/"$//')"
+  MERGED_HOSTS="$CURRENT_HOSTS"
+  for host in ${ALLOWED_HOSTS//,/ }; do
+    case ",$MERGED_HOSTS," in
+      *",$host,"*) ;;
+      *) MERGED_HOSTS="${MERGED_HOSTS:+$MERGED_HOSTS,}$host" ;;
+    esac
+  done
+  if [ "$MERGED_HOSTS" != "$CURRENT_HOSTS" ]; then
+    log "Updating DJANGO_ALLOWED_HOSTS in $ENV_FILE to $MERGED_HOSTS"
+    if grep -q '^DJANGO_ALLOWED_HOSTS=' "$ENV_FILE"; then
+      sed -i "s|^DJANGO_ALLOWED_HOSTS=.*|DJANGO_ALLOWED_HOSTS=\"$MERGED_HOSTS\"|" "$ENV_FILE"
+    else
+      printf 'DJANGO_ALLOWED_HOSTS="%s"\n' "$MERGED_HOSTS" >> "$ENV_FILE"
+    fi
+  else
+    log "$ENV_FILE already exists and lists this server; leaving it untouched"
+  fi
 fi
 
 # --- 5. Migrate and collectstatic ------------------------------------------
@@ -138,10 +177,13 @@ run_manage migrate --noinput
 log "Collecting static files"
 run_manage collectstatic --noinput
 
+# --- 5b. Initial administrator -------------------------------------------
 if ! run_manage shell -c "import sys; from django.contrib.auth import get_user_model; sys.exit(0 if get_user_model().objects.filter(is_superuser=True).exists() else 1)" >/dev/null 2>&1; then
-  log "No superuser found yet. Create one with:"
-  log "  sudo -u $APP_USER --preserve-env $VENV_DIR/bin/python manage.py createsuperuser"
-  log "(run with: set -a; . $ENV_FILE; set +a; cd $APP_DIR)"
+  log "Seeding the initial administrator account"
+  run_manage seed_admin
+  log "Sign in at /admin/ and change the password immediately."
+else
+  log "A superuser already exists; leaving accounts untouched"
 fi
 
 # --- 6. Gunicorn service -----------------------------------------------
@@ -163,7 +205,8 @@ systemctl is-active --quiet correspondence || {
 log "Installing nginx site"
 if [ ! -f /etc/nginx/sites-available/correspondence ]; then
   {
-    sed "s|@BASE_DIR@|$BASE_DIR|g" "$APP_DIR/deploy/nginx-8086.conf.example"
+    sed "s|@BASE_DIR@|$BASE_DIR|g; s|^    server_name .*|    server_name _ ${ALLOWED_HOSTS//,/ };|" \
+      "$APP_DIR/deploy/nginx-8086.conf.example"
   } > /etc/nginx/sites-available/correspondence
   ln -sf /etc/nginx/sites-available/correspondence /etc/nginx/sites-enabled/correspondence
   nginx -t

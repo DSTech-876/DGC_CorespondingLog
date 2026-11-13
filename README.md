@@ -3,7 +3,7 @@
 Django + PostgreSQL starter for a LAN-hosted correspondence register.
 
 ## Included in this first build
-- Branded UI with a system logo (`static/img/logo.svg`, favicon `static/img/logo-mark.svg`) shown on the login page and main navbar — replace these two SVGs with your organization's real artwork when available
+- Branded UI using the DGC logo (`static/img/dgc.png`, also used as the favicon) shown on the login page and main navbar
 - Staff login using Django authentication
 - Correspondence register with original spreadsheet fields
 - Incoming / outgoing / unspecified direction
@@ -26,7 +26,7 @@ This is a development starter, not yet a production-approved records system. The
    source .venv/bin/activate
    pip install -r requirements.txt
    python manage.py migrate
-   python manage.py createsuperuser
+   python manage.py seed_admin
    python manage.py runserver 0.0.0.0:8000
    ```
    `registry/migrations/` is committed to the repo, so `migrate` alone creates all tables; `makemigrations registry` is only needed after changing `registry/models.py`.
@@ -54,11 +54,22 @@ python manage.py import_register /path/to/register.xlsx --skip-existing
 ```
 Use a database backup before importing. The import command does not guess direction or transform ambiguous values. It will not import section labels such as YEAR 2021 or APRIL.
 
+## Seeding the first administrator
+`python manage.py seed_admin` creates the initial superuser without an interactive prompt and is safe to re-run. It reads `DJANGO_SUPERUSER_USERNAME` (default `admin`), `DJANGO_SUPERUSER_EMAIL` and `DJANGO_SUPERUSER_PASSWORD`, or the matching `--username`, `--email` and `--password` options. When no password is supplied, a strong one is generated and printed once — store it securely and change it after the first sign in. If the account already exists, the command restores superuser/staff/active privileges and leaves the password alone unless `--reset-password` is given:
+```
+DJANGO_SUPERUSER_USERNAME=dgcadmin DJANGO_SUPERUSER_PASSWORD='choose-a-strong-password' python manage.py seed_admin
+python manage.py seed_admin --username dgcadmin --reset-password
+```
+`deploy/install-8086.sh` runs this automatically when no superuser exists and prints the generated password at the end of the install.
+
+## Troubleshooting `Bad Request (400)`
+Django returns `Bad Request (400)` when the `Host` header is not in `ALLOWED_HOSTS`. Loopback addresses and this server's own hostname/IPv4 addresses are now always allowed automatically, so add any extra name used to reach the site (DNS alias, reverse-proxy hostname) to `DJANGO_ALLOWED_HOSTS`, host-only and without the port. `deploy/install-8086.sh` detects the LAN IP and repairs an existing `DJANGO_ALLOWED_HOSTS` on re-run. Because the site runs on a non-standard port, CSRF origins are derived from the allowed hosts for ports `8000,8001,8086` (override with `DJANGO_SITE_PORTS`, or set `DJANGO_CSRF_TRUSTED_ORIGINS` explicitly).
+
 ## User roles
 Create staff users in Django Admin (`/admin/`). Grant `registry.export_correspondence` to users allowed to export. Django's default `is_staff` is for admin access; ordinary staff users can use the main register without admin access. For production, define groups such as Registry Clerk, Supervisor, Read-only and System Administrator.
 
 ## LAN deployment
-Recommended: run `sudo ./deploy/install-8086.sh` on a fresh Ubuntu 22.04/24.04 LAN server. It automates the full walkthrough below end-to-end and is safe to re-run (idempotent) — it creates the service account, clones/installs the app, writes `/etc/correspondence-cms.env` with a generated secret key (safely quoting every value), creates the PostgreSQL role/database, migrates, collects static files, and installs the systemd + Nginx units on port 8086. Override `REPO_URL`, `BRANCH`, `DB_PASSWORD`, `ALLOWED_HOSTS`, or `LAN_SUBNET` via environment variables; create the first admin user afterwards with `createsuperuser` (printed at the end of the run).
+Recommended: run `sudo ./deploy/install-8086.sh` on a fresh Ubuntu 22.04/24.04 LAN server. It automates the full walkthrough below end-to-end and is safe to re-run (idempotent) — it creates the service account, clones/installs the app, writes `/etc/correspondence-cms.env` with a generated secret key (safely quoting every value), creates the PostgreSQL role/database, migrates, collects static files, seeds the first admin user with `seed_admin` (the generated password is printed at the end of the run), and installs the systemd + Nginx units on port 8086. Override `REPO_URL`, `BRANCH`, `DB_PASSWORD`, `ALLOWED_HOSTS`, or `LAN_SUBNET` via environment variables.
 
 For the full manual walkthrough (useful to understand or customize each step) serving the site on port 8086 (Nginx 8086 -> Gunicorn 127.0.0.1:8087), see `deploy/UBUNTU_DEPLOY_8086.md`, with `deploy/correspondence-8086.service`, `deploy/nginx-8086.conf.example` and the incremental updater `deploy/update-from-github.sh`.
 
