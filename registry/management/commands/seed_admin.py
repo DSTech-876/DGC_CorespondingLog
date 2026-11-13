@@ -4,6 +4,9 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from registry.models import UserProfile
+from registry.roles import apply_role
+
 
 class Command(BaseCommand):
     help = (
@@ -38,7 +41,8 @@ class Command(BaseCommand):
 
         user = User.objects.filter(**{User.USERNAME_FIELD: username}).first()
         if user is None:
-            User.objects.create_superuser(username, email=email, password=password)
+            user = User.objects.create_superuser(username, email=email, password=password)
+            apply_role(user, UserProfile.Role.ADMIN)
             self.stdout.write(self.style.SUCCESS(f"Created superuser '{username}'."))
             if generated:
                 self._write_generated_password(password)
@@ -55,6 +59,7 @@ class Command(BaseCommand):
             user.set_password(password)
             changed.append("password")
         user.save()
+        apply_role(user, UserProfile.Role.ADMIN)
 
         summary = ", ".join(changed) if changed else "no changes needed"
         self.stdout.write(self.style.SUCCESS(f"Superuser '{username}' already exists ({summary})."))

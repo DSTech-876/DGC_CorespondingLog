@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}My profile{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>My profile</h1>
+    <p class="subtitle">Your name and contact details for this system.</p>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-xl-7">
+    <div class="card p-4">
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% include "partials/form.html" with form=form wrapper_class="col-md-6" %}
+        <div class="d-flex gap-2 mt-4">
+          <button class="btn btn-primary" type="submit"><i class="bi bi-check2 me-1"></i> Save details</button>
+          <a class="btn btn-outline-secondary" href="{% url 'password_change' %}">Change password</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-xl-5">
+    <div class="card p-4">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <span class="avatar">{{ user.get_username|slice:":2" }}</span>
+        <div>
+          <div class="fw-semibold">{{ user.get_full_name|default:user.get_username }}</div>
+          <div class="muted small">{{ user.get_username }}</div>
+        </div>
+      </div>
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">Role</div>
+          <div class="detail-value">
+            <span class="pill {% if profile.role == 'admin' %}pill-info{% elif profile.role == 'officer' %}pill-in{% else %}pill-other{% endif %}">
+              {{ profile.get_role_display }}
+            </span>
+          </div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Account status</div>
+          <div class="detail-value">{% if user.is_active %}Active{% else %}Inactive{% endif %}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Last sign in</div>
+          <div class="detail-value">{{ user.last_login|date:"Y-m-d H:i"|default:"—" }}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Password last changed</div>
+          <div class="detail-value">{{ profile.password_changed_at|date:"Y-m-d H:i"|default:"—" }}</div>
+        </div>
+      </div>
+      <hr>
+      <p class="muted small mb-0">
+        Only an administrator can change your role or username. Contact them if your access is wrong.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

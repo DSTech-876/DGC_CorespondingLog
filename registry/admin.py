@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import Correspondence, Attachment, Action, CollectionRecord, AuditLog
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import User
+
+from .models import Correspondence, Attachment, Action, CollectionRecord, AuditLog, UserProfile
 
 class AttachmentInline(admin.TabularInline):
     model = Attachment
@@ -23,3 +26,28 @@ class CorrespondenceAdmin(admin.ModelAdmin):
 class AuditLogAdmin(admin.ModelAdmin):
     list_display = ("created_at", "user", "event", "correspondence")
     readonly_fields = ("user", "correspondence", "event", "details", "created_at")
+
+
+class UserProfileInline(admin.StackedInline):
+    model = UserProfile
+    can_delete = False
+    extra = 0
+    fields = ("role", "job_title", "phone", "must_change_password", "password_changed_at")
+    readonly_fields = ("password_changed_at",)
+
+
+class UserAdmin(BaseUserAdmin):
+    """Shows registry role and profile fields alongside the standard user form."""
+
+    inlines = [UserProfileInline]
+    list_display = ("username", "email", "first_name", "last_name", "registry_role", "is_active", "is_superuser")
+    list_select_related = ("profile",)
+
+    @admin.display(description="Registry role", ordering="profile__role")
+    def registry_role(self, obj):
+        profile = getattr(obj, "profile", None)
+        return profile.get_role_display() if profile else "—"
+
+
+admin.site.unregister(User)
+admin.site.register(User, UserAdmin)

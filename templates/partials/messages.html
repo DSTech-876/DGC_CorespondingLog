@@ -1,0 +1,11 @@
+{% if messages %}
+  <div class="mb-3 no-print">
+    {% for message in messages %}
+      <div class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags == 'warning' %}alert-warning{% elif message.tags == 'info' %}alert-info{% else %}alert-success{% endif %} alert-dismissible fade show d-flex align-items-start gap-2" role="alert">
+        <i class="bi {% if message.tags == 'error' %}bi-exclamation-octagon{% elif message.tags == 'warning' %}bi-exclamation-triangle{% elif message.tags == 'info' %}bi-info-circle{% else %}bi-check-circle{% endif %} mt-1"></i>
+        <div>{{ message }}</div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}

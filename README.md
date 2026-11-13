@@ -3,7 +3,8 @@
 Django + PostgreSQL starter for a LAN-hosted correspondence register.
 
 ## Included in this first build
-- Branded UI using the DGC logo (`static/img/dgc.png`, also used as the favicon) shown on the login page and main navbar
+- Modern responsive interface: sidebar navigation shell, dashboard tiles, light/dark theme toggle, print-friendly record pages
+- Branded UI using the DGC logo (`static/img/dgc.png`, also used as the favicon) shown on the sign-in page and sidebar
 - Staff login using Django authentication
 - Correspondence register with original spreadsheet fields
 - Incoming / outgoing / unspecified direction
@@ -11,7 +12,10 @@ Django + PostgreSQL starter for a LAN-hosted correspondence register.
 - Attachments, action history and collection history
 - CSV export permission
 - Audit entries for core changes
+- Role-based user management for administrators (create, edit, deactivate, reset passwords)
+- Self-service profile, password change and email-based password reset
 - Import command for XLSX, CSV and Markdown pipe tables
+- Bootstrap and Bootstrap Icons are vendored in `static/vendor/`, so the UI works on an isolated LAN with no internet access
 
 ## Important before production
 This is a development starter, not yet a production-approved records system. The current import command deliberately labels imported direction as `Other / Not specified`, because the source register does not contain a reliable incoming/outgoing field. It stores source row values in `original_row`. Review import results before operational use. Do not expose media files publicly; configure authenticated attachment downloads before production, and add a formal retention/backup policy. Sensitive personal/medical references require access controls and an organizational privacy review.
@@ -66,7 +70,32 @@ python manage.py seed_admin --username dgcadmin --reset-password
 Django returns `Bad Request (400)` when the `Host` header is not in `ALLOWED_HOSTS`. Loopback addresses and this server's own hostname/IPv4 addresses are now always allowed automatically, so add any extra name used to reach the site (DNS alias, reverse-proxy hostname) to `DJANGO_ALLOWED_HOSTS`, host-only and without the port. `deploy/install-8086.sh` detects the LAN IP and repairs an existing `DJANGO_ALLOWED_HOSTS` on re-run. Because the site runs on a non-standard port, CSRF origins are derived from the allowed hosts for ports `8000,8001,8086` (override with `DJANGO_SITE_PORTS`, or set `DJANGO_CSRF_TRUSTED_ORIGINS` explicitly).
 
 ## User roles
-Create staff users in Django Admin (`/admin/`). Grant `registry.export_correspondence` to users allowed to export. Django's default `is_staff` is for admin access; ordinary staff users can use the main register without admin access. For production, define groups such as Registry Clerk, Supervisor, Read-only and System Administrator.
+Every account has a registry role that maps to a Django permission group, applied automatically when the role is set:
+
+| Role | Can do |
+| --- | --- |
+| Viewer | Read the register, open records, use search and filters |
+| Records officer | Everything a viewer can, plus register and edit correspondence, upload attachments, add actions and collection entries, export CSV |
+| Administrator | Everything above, plus user management and the Django admin site |
+
+Roles are defined in `registry/roles.py`; adding a permission there and re-saving a user re-applies the group. Views are gated on the underlying permissions, so a viewer who reaches a write URL directly receives `403 Forbidden`.
+
+## User management
+Administrators manage accounts in the app at `/users/` (sidebar: **Administration → User management**) without needing the Django admin site:
+- Search and filter accounts by name, username, email, role and active/inactive status
+- Create an account with a temporary password; the user is forced to choose a new one at next sign-in
+- Edit names, email, job title, phone and role
+- Deactivate or reactivate an account (deactivating preserves its records and audit history)
+- Reset another user's password, again forcing a change at next sign-in
+
+Administrators cannot demote or deactivate their own account, which prevents locking the last administrator out. Every user-management action is written to the audit log.
+
+## Passwords and password reset
+- Users change their own password at **Account → Change password**.
+- Accounts flagged `must_change_password` are redirected to the change-password page until they set their own password; this is enforced by `registry.middleware.ForcePasswordChangeMiddleware`.
+- The sign-in page offers **Forgot password?**, which emails a time-limited reset link (`PASSWORD_RESET_TIMEOUT`, default 2 hours).
+- Email delivery is configured with `EMAIL_HOST` and friends (see `.env.example`). When `EMAIL_HOST` is unset, Django's console backend is used and the reset message — including the working link — is printed to the service log, which is usable on a closed LAN without a mail relay (`journalctl -u correspondence-8086`).
+- Django's standard password validators apply (minimum 8 characters, not entirely numeric, not a common password, not similar to the username).
 
 ## LAN deployment
 Recommended: run `sudo ./deploy/install-8086.sh` on a fresh Ubuntu 22.04/24.04 LAN server. It automates the full walkthrough below end-to-end and is safe to re-run (idempotent) — it creates the service account, clones/installs the app, writes `/etc/correspondence-cms.env` with a generated secret key (safely quoting every value), creates the PostgreSQL role/database, migrates, collects static files, seeds the first admin user with `seed_admin` (the generated password is printed at the end of the run), and installs the systemd + Nginx units on port 8086. Override `REPO_URL`, `BRANCH`, `DB_PASSWORD`, `ALLOWED_HOSTS`, or `LAN_SUBNET` via environment variables.
@@ -80,5 +109,6 @@ Legacy simple alternative: `deploy/ubuntu-install.sh` (base packages + PostgreSQ
 ## Known next steps
 - Confirm the two blank/ambiguous `FROM` and `TO` columns in the original workbook.
 - Verify all original workbook sheets and rows; the provided Markdown extract appears to be only a small portion of the register.
-- Add protected attachment serving, file type/size validation, virus scanning, password policy, rate limiting, complete audit coverage and tested restore procedure before go-live.
+- Add protected attachment serving, file type/size validation, virus scanning, password expiry policy, rate limiting, complete audit coverage and tested restore procedure before go-live.
+- Configure an SMTP relay so password-reset links reach users by email instead of only the service log.
 - Add XLSX export and printable report layouts.

@@ -49,6 +49,7 @@ def correspondence_detail(request, pk):
     return render(request, "registry/detail.html", {"item": item, "attachment_form": AttachmentForm(), "action_form": ActionForm(), "collection_form": CollectionRecordForm()})
 
 @login_required
+@permission_required("registry.add_correspondence", raise_exception=True)
 def correspondence_create(request):
     form = CorrespondenceForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -59,6 +60,7 @@ def correspondence_create(request):
     return render(request, "registry/form.html", {"form": form, "title": "Register correspondence"})
 
 @login_required
+@permission_required("registry.change_correspondence", raise_exception=True)
 def correspondence_edit(request, pk):
     item = get_object_or_404(Correspondence, pk=pk)
     form = CorrespondenceForm(request.POST or None, instance=item)
@@ -70,6 +72,7 @@ def correspondence_edit(request, pk):
     return render(request, "registry/form.html", {"form": form, "title": "Edit correspondence"})
 
 @login_required
+@permission_required("registry.add_attachment", raise_exception=True)
 def attachment_upload(request, pk):
     item = get_object_or_404(Correspondence, pk=pk)
     form = AttachmentForm(request.POST or None, request.FILES or None)
@@ -80,6 +83,7 @@ def attachment_upload(request, pk):
     return redirect("correspondence_detail", pk=pk)
 
 @login_required
+@permission_required("registry.add_action", raise_exception=True)
 def action_add(request, pk):
     item = get_object_or_404(Correspondence, pk=pk)
     form = ActionForm(request.POST or None)
@@ -89,6 +93,7 @@ def action_add(request, pk):
     return redirect("correspondence_detail", pk=pk)
 
 @login_required
+@permission_required("registry.add_collectionrecord", raise_exception=True)
 def collection_add(request, pk):
     item = get_object_or_404(Correspondence, pk=pk)
     form = CollectionRecordForm(request.POST or None)
