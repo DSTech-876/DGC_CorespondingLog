@@ -1,10 +1,48 @@
 import os
+import socket
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "replace-this-before-production")
 DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
-ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
+
+
+def _split_env(name, default=""):
+    return [v.strip() for v in os.environ.get(name, default).split(",") if v.strip()]
+
+
+def _local_hostnames():
+    """Host names/IPv4 addresses this machine answers to, so a LAN deployment
+    reached by its own IP does not fail host validation with Bad Request (400)."""
+    names = {"127.0.0.1", "localhost", "[::1]"}
+    try:
+        hostname = socket.gethostname()
+        names.add(hostname)
+        names.add(f"{hostname}.local")
+        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+            names.add(info[4][0])
+    except OSError:
+        pass
+    return sorted(names)
+
+
+ALLOWED_HOSTS = _split_env("DJANGO_ALLOWED_HOSTS")
+if "*" not in ALLOWED_HOSTS:
+    # Always keep loopback and this host's own names/addresses reachable.
+    ALLOWED_HOSTS = sorted(set(ALLOWED_HOSTS) | set(_local_hostnames()))
+
+# Non-standard ports (e.g. 8086) must appear in the CSRF origin, otherwise login
+# POSTs are rejected. Derive origins from the allowed hosts unless set explicitly.
+CSRF_TRUSTED_ORIGINS = _split_env("DJANGO_CSRF_TRUSTED_ORIGINS")
+if not CSRF_TRUSTED_ORIGINS:
+    _ports = _split_env("DJANGO_SITE_PORTS", "8000,8001,8086")
+    for _host in ALLOWED_HOSTS:
+        if _host == "*":
+            continue
+        _host = _host.lstrip(".")
+        for _scheme in ("http", "https"):
+            CSRF_TRUSTED_ORIGINS.append(f"{_scheme}://{_host}")
+            CSRF_TRUSTED_ORIGINS.extend(f"{_scheme}://{_host}:{_port}" for _port in _ports)
 
 INSTALLED_APPS = [
     "django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes",
