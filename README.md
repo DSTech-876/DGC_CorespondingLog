@@ -50,6 +50,8 @@ Use a database backup before importing. The import command does not guess direct
 Create staff users in Django Admin (`/admin/`). Grant `registry.export_correspondence` to users allowed to export. Django's default `is_staff` is for admin access; ordinary staff users can use the main register without admin access. For production, define groups such as Registry Clerk, Supervisor, Read-only and System Administrator.
 
 ## LAN deployment
+For a full Ubuntu walkthrough serving the site on port 8086 (Nginx 8086 -> Gunicorn 127.0.0.1:8087), see `deploy/UBUNTU_DEPLOY_8086.md`, with `deploy/correspondence-8086.service`, `deploy/nginx-8086.conf.example` and the incremental updater `deploy/update-from-github.sh`.
+
 See `deploy/ubuntu-install.sh` for base packages and PostgreSQL setup. Configure Nginx + Gunicorn with `deploy/correspondence.service` and `deploy/nginx.conf.example`. Replace the example LAN IP/hostname and set a firewall rule allowing TCP/80 only from the office subnet. Add internal HTTPS if credentials or sensitive records cross shared networks.
 
 ## Known next steps
