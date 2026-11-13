@@ -1,4 +1,5 @@
 import csv
+import time
 from pathlib import Path
 from uuid import uuid4
 from django.conf import settings
@@ -167,6 +168,17 @@ def _discard_staged(request):
         path.unlink(missing_ok=True)
 
 
+def _cleanup_old_staging_files(max_age_seconds=86400):
+    """Remove staging files older than max_age_seconds (default 24 hours)."""
+    staging_dir = _staging_dir()
+    current_time = time.time()
+    for file_path in staging_dir.iterdir():
+        if file_path.is_file():
+            file_age = current_time - file_path.stat().st_mtime
+            if file_age > max_age_seconds:
+                file_path.unlink(missing_ok=True)
+
+
 @login_required
 @permission_required("registry.add_correspondence", raise_exception=True)
 def register_import(request):
@@ -174,7 +186,10 @@ def register_import(request):
     form = RegisterImportForm(request.POST or None, request.FILES or None)
     context = {"form": form}
     if request.method == "POST" and form.is_valid():
-        _discard_staged(request)
+        if IMPORT_SESSION_KEY in request.session:
+            form.add_error("file", "An import is already in progress. Please cancel or confirm it before uploading another file.")
+            return render(request, "registry/import.html", context)
+        _cleanup_old_staging_files()
         upload = form.cleaned_data["file"]
         try:
             parsed = parse_rows(rows_from_stream(upload, upload.name))
