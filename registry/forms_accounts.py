@@ -247,9 +247,17 @@ class AdminSetPasswordForm(BootstrapFormMixin, forms.Form):
         return cleaned
 
     def save(self):
+        from django.utils import timezone
         self.target_user.set_password(self.cleaned_data["new_password1"])
         self.target_user.save(update_fields=["password"])
         profile, _ = UserProfile.objects.get_or_create(user=self.target_user)
         profile.must_change_password = bool(self.cleaned_data.get("require_change"))
-        profile.save(update_fields=["must_change_password"])
+        profile.password_changed_at = timezone.now()
+        profile.save(update_fields=["must_change_password", "password_changed_at"])
         return self.target_user
+
+
+class PasswordResetConfirmForm(BootstrapFormMixin, SetPasswordForm):
+    """Password reset confirmation form that clears the forced-change flag."""
+    pass
+

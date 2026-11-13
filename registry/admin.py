@@ -3,6 +3,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 
 from .models import Correspondence, Attachment, Action, CollectionRecord, AuditLog, UserProfile
+from .roles import apply_role
 
 class AttachmentInline(admin.TabularInline):
     model = Attachment
@@ -34,6 +35,13 @@ class UserProfileInline(admin.StackedInline):
     extra = 0
     fields = ("role", "job_title", "phone", "must_change_password", "password_changed_at")
     readonly_fields = ("password_changed_at",)
+
+    def save_model(self, request, obj, form, change):
+        """Save profile and re-apply role to ensure permissions are synced."""
+        super().save_model(request, obj, form, change)
+        # Re-apply the role to ensure permissions are synchronized with ROLE_GROUPS
+        if obj.user:
+            apply_role(obj.user, obj.role)
 
 
 class UserAdmin(BaseUserAdmin):

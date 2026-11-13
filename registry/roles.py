@@ -42,8 +42,8 @@ def get_role_group(role):
     """Return (creating if needed) the auth group backing ``role``."""
     name, codenames = ROLE_GROUPS[role]
     group, created = Group.objects.get_or_create(name=name)
-    if created or not group.permissions.exists():
-        group.permissions.set(_permissions_for(codenames))
+    # Always synchronize permissions to pick up changes to ROLE_GROUPS
+    group.permissions.set(_permissions_for(codenames))
     return group
 
 
@@ -82,4 +82,12 @@ def apply_role(user, role, extra_groups=()):
 
 def is_registry_admin(user):
     """True when the account may manage other users."""
-    return bool(user.is_authenticated and user.is_active and (user.is_superuser or user.is_staff))
+    if not (user.is_authenticated and user.is_active):
+        return False
+    if user.is_superuser:
+        return True
+    # Check profile role for non-superusers
+    profile = getattr(user, 'profile', None)
+    if profile and profile.role == Role.ADMIN:
+        return True
+    return False

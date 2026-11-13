@@ -5,6 +5,7 @@ from functools import wraps
 from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import PasswordResetConfirmView as DjangoPasswordResetConfirmView
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
@@ -14,6 +15,7 @@ from django.views.decorators.http import require_POST
 
 from .forms_accounts import (
     AdminSetPasswordForm,
+    PasswordResetConfirmForm,
     ProfileForm,
     StyledPasswordChangeForm,
     UserCreateForm,
@@ -94,7 +96,7 @@ def user_create(request):
         _log(request, "User created", f"{user.username} ({form.cleaned_data['role']})")
         messages.success(
             request,
-            f"Account “{user.username}” created. Share the temporary password securely — "
+            f'Account "{user.username}" created. Share the temporary password securely — '
             "it must be changed at first sign in.",
         )
         return redirect("user_list")
@@ -115,7 +117,7 @@ def user_edit(request, pk):
     if request.method == "POST" and form.is_valid():
         user = form.save()
         _log(request, "User updated", f"{user.username} ({form.cleaned_data['role']})")
-        messages.success(request, f"Account “{user.username}” updated.")
+        messages.success(request, f'Account "{user.username}" updated.')
         return redirect("user_list")
     return render(request, "registry/users/form.html", {
         "form": form,
@@ -139,7 +141,7 @@ def user_toggle_active(request, pk):
     target.save(update_fields=["is_active"])
     state = "activated" if target.is_active else "deactivated"
     _log(request, f"User {state}", target.username)
-    messages.success(request, f"Account “{target.username}” {state}.")
+    messages.success(request, f'Account "{target.username}" {state}.')
     return redirect("user_list")
 
 
@@ -155,7 +157,7 @@ def user_reset_password(request, pk):
         _log(request, "Password reset by administrator", target.username)
         messages.success(
             request,
-            f"Password reset for “{target.username}”. Share the new password securely.",
+            f'Password reset for "{target.username}". Share the new password securely.',
         )
         return redirect("user_list")
     return render(request, "registry/users/reset_password.html", {"form": form, "target": target})
@@ -189,3 +191,21 @@ def password_change(request):
         return redirect("dashboard")
     template = "registration/password_change_forced.html" if forced else "registration/password_change_form.html"
     return render(request, template, {"form": form, "forced": forced})
+
+
+class PasswordResetConfirmView(DjangoPasswordResetConfirmView):
+    """Custom password reset confirm view that updates the user profile."""
+
+    form_class = PasswordResetConfirmForm
+    template_name = "registration/password_reset_confirm.html"
+
+    def form_valid(self, form):
+        """Save password and clear the forced-change flag."""
+        user = form.save()
+        # Update profile to clear forced password change and record the change time
+        UserProfile.objects.filter(user=user).update(
+            must_change_password=False,
+            password_changed_at=timezone.now()
+        )
+        return super().form_valid(form)
+
