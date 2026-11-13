@@ -229,6 +229,10 @@ def parse_rows(rows):
             parsed.blank_rows += 1
             continue
 
+        if all(cell == "---" for cell in cells if cell):
+            parsed.divider_rows += 1
+            continue
+
         values, raw_values = {}, {}
         for field_name, indexes in columns.items():
             text, raw = "", None
