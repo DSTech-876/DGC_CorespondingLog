@@ -1,0 +1,29 @@
+[Unit]
+Description=Correspondence CMS (Gunicorn)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+User=correspondence
+Group=correspondence
+WorkingDirectory=/opt/correspondence-cms/app
+EnvironmentFile=/etc/correspondence-cms.env
+ExecStart=/opt/correspondence-cms/venv/bin/gunicorn \
+    --workers 3 \
+    --timeout 60 \
+    --bind 127.0.0.1:8087 \
+    --access-logfile - \
+    --error-logfile - \
+    config.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/correspondence-cms
+
+[Install]
+WantedBy=multi-user.target
