@@ -144,8 +144,10 @@ sudo ./update.sh --deploy   # pull, then update /opt/correspondence-cms
 It refuses to run when the checkout has uncommitted changes or local commits
 that are not on the remote branch; add `--force` to discard them. If GitHub is
 unreachable (the usual `Could not resolve host: github.com`), it prints the DNS,
-proxy and offline-copy checks to work through. Overridable variables: `BRANCH`,
-`REMOTE`, `REPO_DIR`, `BASE_DIR`.
+proxy and offline-copy checks to work through. A ZIP download is not a git
+clone - the script says so and points at the two ways forward (clone the repo,
+or run the server-side updater). Overridable variables: `BRANCH`, `REMOTE`,
+`REPO_DIR`, `BASE_DIR`.
 
 ### On the server
 
@@ -171,6 +173,10 @@ sudo BRANCH=release correspondence-update
 Files deleted upstream are listed but not removed from the server; delete them
 manually after review. The script refuses to run before the initial install has
 recorded a commit in `/opt/correspondence-cms/.deployed_commit`.
+
+Both scripts run `git` with a `safe.directory` exception scoped to the clone
+they operate on, so `sudo` against a clone owned by another user no longer
+fails with `fatal: detected dubious ownership in repository`.
 
 ## Notes
 

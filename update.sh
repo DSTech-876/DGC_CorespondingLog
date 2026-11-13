@@ -19,6 +19,11 @@ FORCE="${FORCE:-0}"
 log() { printf '[update] %s\n' "$*"; }
 die() { printf '[update] ERROR: %s\n' "$*" >&2; exit 1; }
 
+# `sudo ./update.sh` runs git as root inside a checkout owned by a regular user,
+# which trips git's "dubious ownership" check. Scope the exception to this
+# checkout only ("command" scope counts as protected configuration).
+git() { command git -c "safe.directory=$REPO_DIR" "$@"; }
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --deploy) DEPLOY=1 ;;
@@ -30,7 +35,18 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-[ -d "$REPO_DIR/.git" ] || die "$REPO_DIR is not a git clone."
+if [ ! -d "$REPO_DIR/.git" ]; then
+  cat >&2 <<EOF
+[update] ERROR: $REPO_DIR is not a git clone (no .git directory).
+This usually means the code was downloaded as a ZIP. Options:
+  1. Replace it with a real clone (recommended):
+       git clone https://github.com/DSTech-876/DGC_CorespondingLog.git ~/DGC_CRL
+       cd ~/DGC_CRL && sudo ./update.sh --deploy
+  2. Update the server straight from GitHub using the clone at $BASE_DIR/src:
+       sudo $BASE_DIR/src/deploy/update-from-github.sh
+EOF
+  exit 1
+fi
 cd "$REPO_DIR"
 
 REMOTE_URL="$(git remote get-url "$REMOTE" 2>/dev/null || true)"
