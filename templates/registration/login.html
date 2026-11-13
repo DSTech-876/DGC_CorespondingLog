@@ -1,1 +1,35 @@
-{% extends "base.html" %}{% load static %}{% block title %}Sign in{% endblock %}{% block content %}<div class="row justify-content-center mt-5"><div class="col-md-4"><div class="text-center mb-3"><img src="{% static 'img/dgc.png' %}" alt="DGC logo" height="90"></div><div class="card p-4"><h3 class="mb-3">Staff sign in</h3><form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary w-100">Sign in</button></form></div></div></div>{% endblock %}
+{% extends "auth_base.html" %}
+
+{% block title %}Sign in{% endblock %}
+
+{% block auth_content %}
+  <h1 class="h5 mb-1">Staff sign in</h1>
+  <p class="muted small mb-4">Use the credentials issued by your administrator.</p>
+
+  {% if form.errors %}
+    <div class="alert alert-danger d-flex align-items-start gap-2 py-2">
+      <i class="bi bi-exclamation-octagon mt-1"></i>
+      <div class="small">Your username and password do not match an active account. Please try again.</div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="mb-3">
+      <label class="form-label" for="{{ form.username.id_for_label }}">Username</label>
+      {{ form.username }}
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="{{ form.password.id_for_label }}">Password</label>
+      {{ form.password }}
+    </div>
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="btn btn-primary w-100 py-2" type="submit">
+      <i class="bi bi-box-arrow-in-right me-1"></i> Sign in
+    </button>
+  </form>
+
+  <div class="text-center mt-3">
+    <a class="small" href="{% url 'password_reset' %}">Forgot your password?</a>
+  </div>
+{% endblock %}

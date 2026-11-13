@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}User management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>User management</h1>
+    <p class="subtitle">Create accounts, assign roles and reset passwords.</p>
+  </div>
+  <a class="btn btn-primary" href="{% url 'user_create' %}"><i class="bi bi-person-plus me-1"></i> Add user</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-tile">
+      <div class="stat-icon"><i class="bi bi-people"></i></div>
+      <div><div class="stat-value">{{ total_users }}</div><div class="stat-label">Accounts</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-tile">
+      <div class="stat-icon is-in"><i class="bi bi-person-check"></i></div>
+      <div><div class="stat-value">{{ active_users }}</div><div class="stat-label">Active</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-tile">
+      <div class="stat-icon is-files"><i class="bi bi-shield-lock"></i></div>
+      <div><div class="stat-value">{{ admin_users }}</div><div class="stat-label">Administrators</div></div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="card stat-tile">
+      <div class="stat-icon is-out"><i class="bi bi-key"></i></div>
+      <div><div class="stat-value">{{ pending_password_changes }}</div><div class="stat-label">Pending password change</div></div>
+    </div>
+  </div>
+</div>
+
+<form class="card p-3 mb-3" method="get">
+  <div class="row g-2 align-items-center">
+    <div class="col-lg-5">
+      <input class="form-control" name="q" value="{{ q }}" placeholder="Search name, username or email">
+    </div>
+    <div class="col-lg-3">
+      <select class="form-select" name="role">
+        <option value="">All roles</option>
+        {% for value, label in roles %}
+          <option value="{{ value }}" {% if role == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-2">
+      <select class="form-select" name="status">
+        <option value="">Any status</option>
+        <option value="active" {% if status == 'active' %}selected{% endif %}>Active</option>
+        <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>Inactive</option>
+      </select>
+    </div>
+    <div class="col-lg-2 d-grid">
+      <button class="btn btn-dark"><i class="bi bi-funnel me-1"></i> Filter</button>
+    </div>
+  </div>
+</form>
+
+<div class="card p-3">
+  <div class="card-title-row mb-2">
+    <span class="muted small">{{ page.paginator.count }} account{{ page.paginator.count|pluralize }}</span>
+  </div>
+
+  <div class="table-responsive table-wrap">
+    <table class="table table-hover align-middle">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th>Last sign in</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for account in page %}
+          <tr>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <span class="avatar">{{ account.username|slice:":2" }}</span>
+                <div>
+                  <div class="fw-semibold">{{ account.get_full_name|default:account.username }}</div>
+                  <div class="muted small">
+                    {{ account.username }}{% if account.profile.job_title %} · {{ account.profile.job_title }}{% endif %}
+                  </div>
+                </div>
+              </div>
+            </td>
+            <td class="muted">{{ account.email|default:"—" }}</td>
+            <td>
+              <span class="pill {% if account.profile.role == 'admin' %}pill-info{% elif account.profile.role == 'officer' %}pill-in{% else %}pill-other{% endif %}">
+                {{ account.profile.get_role_display|default:"—" }}
+              </span>
+            </td>
+            <td>
+              {% if account.is_active %}
+                <span class="pill pill-success"><i class="bi bi-check-circle"></i> Active</span>
+              {% else %}
+                <span class="pill pill-danger"><i class="bi bi-slash-circle"></i> Inactive</span>
+              {% endif %}
+              {% if account.profile.must_change_password %}
+                <span class="pill pill-other mt-1"><i class="bi bi-key"></i> Must change password</span>
+              {% endif %}
+            </td>
+            <td class="muted small">{{ account.last_login|date:"Y-m-d H:i"|default:"Never" }}</td>
+            <td class="text-end">
+              <div class="d-inline-flex gap-1">
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'user_edit' account.pk %}" title="Edit account">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'user_reset_password' account.pk %}" title="Reset password">
+                  <i class="bi bi-key"></i>
+                </a>
+                {% if account.pk != user.pk %}
+                  <form method="post" action="{% url 'user_toggle_active' account.pk %}"
+                        data-confirm="{% if account.is_active %}Deactivate{% else %}Activate{% endif %} {{ account.username }}?">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-{% if account.is_active %}danger{% else %}success{% endif %}"
+                            title="{% if account.is_active %}Deactivate{% else %}Activate{% endif %} account">
+                      <i class="bi bi-{% if account.is_active %}person-dash{% else %}person-check{% endif %}"></i>
+                    </button>
+                  </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state"><i class="bi bi-people"></i> No accounts match your filters.</div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page.paginator.num_pages > 1 %}
+    <nav class="d-flex justify-content-between align-items-center mt-3">
+      <span class="muted small">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+      <div class="d-flex gap-1">
+        {% if page.has_previous %}
+          <a class="btn btn-sm btn-outline-secondary" href="?q={{ q|urlencode }}&role={{ role }}&status={{ status }}&page={{ page.previous_page_number }}">Previous</a>
+        {% endif %}
+        {% if page.has_next %}
+          <a class="btn btn-sm btn-outline-secondary" href="?q={{ q|urlencode }}&role={{ role }}&status={{ status }}&page={{ page.next_page_number }}">Next</a>
+        {% endif %}
+      </div>
+    </nav>
+  {% endif %}
+</div>
+{% endblock %}

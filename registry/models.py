@@ -1,6 +1,45 @@
 from django.conf import settings
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.utils import timezone
+
+
+class UserProfile(models.Model):
+    """Per-account settings the register needs on top of ``auth.User``."""
+
+    class Role(models.TextChoices):
+        VIEWER = "viewer", "Viewer"
+        OFFICER = "officer", "Records officer"
+        ADMIN = "admin", "Administrator"
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
+    role = models.CharField(max_length=20, choices=Role.choices, default=Role.OFFICER)
+    job_title = models.CharField(max_length=120, blank=True)
+    phone = models.CharField(max_length=40, blank=True)
+    must_change_password = models.BooleanField(
+        default=False,
+        help_text="Forces the user to choose a new password at next sign in.",
+    )
+    password_changed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Profile for {self.user}"
+
+
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def ensure_user_profile(sender, instance, created, **kwargs):
+    """Give every new account a profile and its default role permissions."""
+    if not created:
+        return
+    from .roles import get_role_group  # imported late: roles imports this module
+
+    role = UserProfile.Role.ADMIN if instance.is_superuser else UserProfile.Role.OFFICER
+    UserProfile.objects.get_or_create(user=instance, defaults={"role": role})
+    instance.groups.add(get_role_group(role))
+
 
 class Correspondence(models.Model):
     class Direction(models.TextChoices):

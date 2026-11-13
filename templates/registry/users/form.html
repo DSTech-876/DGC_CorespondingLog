@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ title }}</h1>
+    <p class="subtitle">{{ subtitle }}</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="{% url 'user_list' %}"><i class="bi bi-arrow-left me-1"></i> Back to users</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-xl-8">
+    <div class="card p-4">
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% include "partials/form.html" with form=form wrapper_class="col-md-6" %}
+        <div class="d-flex gap-2 mt-4">
+          <button class="btn btn-primary" type="submit"><i class="bi bi-check2 me-1"></i> {{ submit_label }}</button>
+          <a class="btn btn-outline-secondary" href="{% url 'user_list' %}">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-xl-4">
+    <div class="card p-4">
+      <h2 class="h6 mb-3"><i class="bi bi-people me-1"></i> Roles</h2>
+      {% for role, description in role_descriptions.items %}
+        <div class="mb-3">
+          <div class="fw-semibold small text-capitalize">{{ role.label }}</div>
+          <div class="muted small">{{ description }}</div>
+        </div>
+      {% endfor %}
+      <hr>
+      <p class="muted small mb-0">
+        Changing a role updates permission group membership immediately. Deactivate rather than
+        delete accounts so audit history stays intact.
+      </p>
+    </div>
+
+    {% if target %}
+      <div class="card p-4 mt-3">
+        <h2 class="h6 mb-3"><i class="bi bi-clock-history me-1"></i> Account</h2>
+        <div class="detail-item mb-2">
+          <div class="detail-label">Last sign in</div>
+          <div class="detail-value">{{ target.last_login|date:"Y-m-d H:i"|default:"Never" }}</div>
+        </div>
+        <div class="detail-item mb-3">
+          <div class="detail-label">Created</div>
+          <div class="detail-value">{{ target.date_joined|date:"Y-m-d" }}</div>
+        </div>
+        <a class="btn btn-sm btn-outline-secondary w-100" href="{% url 'user_reset_password' target.pk %}">
+          <i class="bi bi-key me-1"></i> Reset password
+        </a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

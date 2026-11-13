@@ -1,1 +1,126 @@
-{% extends "base.html" %}{% block content %}<div class="d-flex justify-content-between mb-3"><div><div class="muted">Correspondence record</div><h2>{{ item.reference_id }}</h2></div><a class="btn btn-outline-primary align-self-start" href="{% url 'correspondence_edit' item.pk %}">Edit record</a></div><div class="row g-3"><div class="col-xl-8"><div class="card p-4"><h5>Register details</h5><dl class="row"><dt class="col-sm-4">Direction</dt><dd class="col-sm-8">{{ item.get_direction_display }}</dd><dt class="col-sm-4">Date received/sent</dt><dd class="col-sm-8">{{ item.date_received_sent|default:"—" }}</dd><dt class="col-sm-4">Date of document</dt><dd class="col-sm-8">{{ item.date_of_document|default:"—" }}</dd><dt class="col-sm-4">From</dt><dd class="col-sm-8">{{ item.sender|default:"—" }}</dd><dt class="col-sm-4">To</dt><dd class="col-sm-8">{{ item.recipient|default:"—" }}</dd><dt class="col-sm-4">Copy to / thru</dt><dd class="col-sm-8">{{ item.copy_to_thru|default:"—" }}</dd><dt class="col-sm-4">Description</dt><dd class="col-sm-8">{{ item.description|default:"—" }}</dd><dt class="col-sm-4">Lab / reference / invoice</dt><dd class="col-sm-8">{{ item.external_reference|default:"—" }}</dd><dt class="col-sm-4">Supervisor directives</dt><dd class="col-sm-8">{{ item.supervisor_directives|default:"—" }}</dd><dt class="col-sm-4">Received / collected by</dt><dd class="col-sm-8">{{ item.received_collected_by|default:"—" }}</dd><dt class="col-sm-4">Date collected</dt><dd class="col-sm-8">{{ item.date_received_collected|default:"—" }}</dd><dt class="col-sm-4">Further comments</dt><dd class="col-sm-8">{{ item.further_comments|default:"—" }}</dd></dl></div><div class="card p-4 mt-3"><h5>Attachments</h5>{% for a in item.attachments.all %}<p><a href="{% url 'attachment_download' a.pk %}">{{ a.original_filename }}</a> — {{ a.notes }}</p>{% empty %}<p class="muted">No attachments.</p>{% endfor %}<form method="post" enctype="multipart/form-data" action="{% url 'attachment_upload' item.pk %}">{% csrf_token %}{{ attachment_form.as_p }}<button class="btn btn-sm btn-outline-primary">Upload attachment</button></form></div></div><div class="col-xl-4"><div class="card p-4"><h5>Actions / directives history</h5>{% for a in item.actions.all %}<div class="border-bottom py-2"><small class="muted">{{ a.action_date }} · {{ a.assigned_to }}</small><div>{{ a.action_text }}</div></div>{% empty %}<p class="muted">No additional actions.</p>{% endfor %}<form method="post" action="{% url 'action_add' item.pk %}" class="mt-3">{% csrf_token %}{{ action_form.as_p }}<button class="btn btn-sm btn-outline-primary">Add action</button></form></div><div class="card p-4 mt-3"><h5>Collection history</h5>{% for c in item.collection_records.all %}<p class="border-bottom pb-2">{{ c.collected_by }} — {{ c.collection_date }}<br>{{ c.notes }}</p>{% empty %}<p class="muted">No collection entries.</p>{% endfor %}<form method="post" action="{% url 'collection_add' item.pk %}">{% csrf_token %}{{ collection_form.as_p }}<button class="btn btn-sm btn-outline-primary">Record collection</button></form></div></div></div>{% endblock %}
+{% extends "base.html" %}
+
+{% block title %}{{ item.reference_id }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <nav class="muted small mb-1">
+      <a class="text-decoration-none" href="{% url 'correspondence_list' %}">Register</a>
+      <i class="bi bi-chevron-right" style="font-size:.7rem"></i>
+      {{ item.reference_id }}
+    </nav>
+    <h1 class="d-flex align-items-center gap-2">
+      {{ item.reference_id }}
+      <span class="pill {% if item.direction == 'IN' %}pill-in{% elif item.direction == 'OUT' %}pill-out{% else %}pill-other{% endif %}">
+        {{ item.get_direction_display }}
+      </span>
+    </h1>
+    <p class="subtitle">{{ item.description|truncatechars:110|default:"No description recorded." }}</p>
+  </div>
+  <div class="d-flex gap-2 no-print">
+    <button class="btn btn-outline-secondary" type="button" onclick="window.print()"><i class="bi bi-printer me-1"></i> Print</button>
+    {% if perms.registry.change_correspondence %}
+      <a class="btn btn-primary" href="{% url 'correspondence_edit' item.pk %}"><i class="bi bi-pencil me-1"></i> Edit record</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-xl-8">
+    <div class="card p-4">
+      <h2 class="h6 mb-3"><i class="bi bi-file-text me-1"></i> Register details</h2>
+      <div class="detail-grid">
+        <div class="detail-item"><div class="detail-label">Date received / sent</div><div class="detail-value">{{ item.date_received_sent|default:"—" }}</div></div>
+        <div class="detail-item"><div class="detail-label">Date of document</div><div class="detail-value">{{ item.date_of_document|default:"—" }}</div></div>
+        <div class="detail-item"><div class="detail-label">From</div><div class="detail-value">{{ item.sender|default:"—" }}</div></div>
+        <div class="detail-item"><div class="detail-label">To</div><div class="detail-value">{{ item.recipient|default:"—" }}</div></div>
+        <div class="detail-item"><div class="detail-label">Copy to / thru</div><div class="detail-value">{{ item.copy_to_thru|default:"—" }}</div></div>
+        <div class="detail-item"><div class="detail-label">Lab / reference / invoice</div><div class="detail-value">{{ item.external_reference|default:"—" }}</div></div>
+        <div class="detail-item"><div class="detail-label">Received / collected by</div><div class="detail-value">{{ item.received_collected_by|default:"—" }}</div></div>
+        <div class="detail-item"><div class="detail-label">Date collected</div><div class="detail-value">{{ item.date_received_collected|default:"—" }}</div></div>
+      </div>
+      <hr>
+      <div class="detail-item mb-3">
+        <div class="detail-label">Description</div>
+        <div class="detail-value">{{ item.description|linebreaksbr|default:"—" }}</div>
+      </div>
+      <div class="detail-item mb-3">
+        <div class="detail-label">Supervisor directives</div>
+        <div class="detail-value">{{ item.supervisor_directives|linebreaksbr|default:"—" }}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-label">Further comments</div>
+        <div class="detail-value">{{ item.further_comments|linebreaksbr|default:"—" }}</div>
+      </div>
+    </div>
+
+    <div class="card p-4 mt-3">
+      <h2 class="h6 mb-3"><i class="bi bi-paperclip me-1"></i> Attachments</h2>
+      {% for a in item.attachments.all %}
+        <div class="d-flex align-items-center gap-2 border-bottom py-2">
+          <i class="bi bi-file-earmark-arrow-down"></i>
+          <div class="flex-grow-1">
+            <a class="text-decoration-none" href="{% url 'attachment_download' a.pk %}">{{ a.original_filename }}</a>
+            {% if a.notes %}<div class="muted small">{{ a.notes }}</div>{% endif %}
+          </div>
+          <span class="muted small">{{ a.uploaded_at|date:"Y-m-d" }}</span>
+        </div>
+      {% empty %}
+        <div class="empty-state py-3"><i class="bi bi-folder2-open"></i> No attachments uploaded.</div>
+      {% endfor %}
+
+      {% if perms.registry.add_attachment %}
+        <form class="mt-3 no-print" method="post" enctype="multipart/form-data" action="{% url 'attachment_upload' item.pk %}">
+          {% csrf_token %}
+          {% include "partials/form.html" with form=attachment_form wrapper_class="col-md-6" %}
+          <button class="btn btn-sm btn-outline-primary mt-3"><i class="bi bi-upload me-1"></i> Upload attachment</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-xl-4">
+    <div class="card p-4">
+      <h2 class="h6 mb-3"><i class="bi bi-list-check me-1"></i> Actions &amp; directives</h2>
+      {% for a in item.actions.all %}
+        <div class="timeline-item">
+          <div class="muted small">{{ a.action_date }}{% if a.assigned_to %} · {{ a.assigned_to }}{% endif %}</div>
+          <div class="small">{{ a.action_text|linebreaksbr }}</div>
+        </div>
+      {% empty %}
+        <div class="empty-state py-3"><i class="bi bi-clipboard"></i> No actions recorded.</div>
+      {% endfor %}
+
+      {% if perms.registry.add_action %}
+        <form class="mt-3 no-print" method="post" action="{% url 'action_add' item.pk %}">
+          {% csrf_token %}
+          {% include "partials/form.html" with form=action_form %}
+          <button class="btn btn-sm btn-outline-primary mt-3"><i class="bi bi-plus-lg me-1"></i> Add action</button>
+        </form>
+      {% endif %}
+    </div>
+
+    <div class="card p-4 mt-3">
+      <h2 class="h6 mb-3"><i class="bi bi-inboxes me-1"></i> Collection history</h2>
+      {% for c in item.collection_records.all %}
+        <div class="timeline-item">
+          <div class="muted small">{{ c.collection_date }}</div>
+          <div class="small fw-semibold">{{ c.collected_by }}</div>
+          {% if c.notes %}<div class="muted small">{{ c.notes|linebreaksbr }}</div>{% endif %}
+        </div>
+      {% empty %}
+        <div class="empty-state py-3"><i class="bi bi-inbox"></i> No collection entries.</div>
+      {% endfor %}
+
+      {% if perms.registry.add_collectionrecord %}
+        <form class="mt-3 no-print" method="post" action="{% url 'collection_add' item.pk %}">
+          {% csrf_token %}
+          {% include "partials/form.html" with form=collection_form %}
+          <button class="btn btn-sm btn-outline-primary mt-3"><i class="bi bi-plus-lg me-1"></i> Record collection</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

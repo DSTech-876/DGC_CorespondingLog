@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% load static %}
+
+{% comment %}Standalone shell for sign-in / password reset pages (no sidebar).{% endcomment %}
+
+{% block body %}
+<div class="auth-page">
+  <div class="w-100" style="max-width:430px">
+    <div class="text-center mb-4">
+      <img class="auth-logo" src="{% static 'img/dgc.png' %}" alt="DGC logo">
+      <div class="mt-2 fw-semibold">Correspondence Register</div>
+      <div class="muted small">Department of Government Chemistry</div>
+    </div>
+
+    <div class="card auth-card">
+      {% include "partials/messages.html" %}
+      {% block auth_content %}{% endblock %}
+    </div>
+
+    <p class="text-center muted small mt-3 mb-0">{% block auth_footer %}Authorised staff only.{% endblock %}</p>
+  </div>
+</div>
+{% endblock %}
