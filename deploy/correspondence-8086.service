@@ -4,11 +4,11 @@ After=network.target postgresql.service
 Wants=postgresql.service
 
 [Service]
-User=correspondence
-Group=correspondence
-WorkingDirectory=/opt/correspondence-cms/app
+User=@APP_USER@
+Group=@APP_USER@
+WorkingDirectory=@BASE_DIR@/app
 EnvironmentFile=/etc/correspondence-cms.env
-ExecStart=/opt/correspondence-cms/venv/bin/gunicorn \
+ExecStart=@BASE_DIR@/venv/bin/gunicorn \
     --workers 3 \
     --timeout 60 \
     --bind 127.0.0.1:8087 \
@@ -23,7 +23,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/var/lib/correspondence-cms
+ReadWritePaths=@MEDIA_DIR@
 
 [Install]
 WantedBy=multi-user.target
