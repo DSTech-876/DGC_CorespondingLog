@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# One-shot, idempotent installer that automates Steps 1-7 of
+# UBUNTU_DEPLOY_8086.md (base packages, service account, clone/venv,
+# env file, migrate/collectstatic, systemd, nginx). Safe to re-run.
+#
+# Usage: sudo ./deploy/install-8086.sh
+# Overridable env vars: REPO_URL, BRANCH, BASE_DIR, APP_USER, DB_NAME,
+#   DB_USER, DB_PASSWORD, ALLOWED_HOSTS, LAN_SUBNET
+set -euo pipefail
+
+REPO_URL="${REPO_URL:-https://github.com/DSTech-876/DGC_CorespondingLog.git}"
+BRANCH="${BRANCH:-main}"
+BASE_DIR="${BASE_DIR:-/opt/correspondence-cms}"
+SRC_DIR="$BASE_DIR/src"
+APP_DIR="$BASE_DIR/app"
+VENV_DIR="$BASE_DIR/venv"
+MEDIA_DIR="/var/lib/correspondence-cms/media"
+ENV_FILE="/etc/correspondence-cms.env"
+APP_USER="${APP_USER:-correspondence}"
+DB_NAME="${DB_NAME:-correspondence_db}"
+DB_USER="${DB_USER:-correspondence_user}"
+DB_PASSWORD="${DB_PASSWORD:-}"
+ALLOWED_HOSTS="${ALLOWED_HOSTS:-127.0.0.1,localhost}"
+LAN_SUBNET="${LAN_SUBNET:-}"
+
+log() { printf '[install] %s\n' "$*"; }
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Run as root, e.g.: sudo ./deploy/install-8086.sh" >&2
+  exit 1
+fi
+
+# --- 1. Base packages ---------------------------------------------------
+log "Installing base packages"
+apt-get update
+apt-get install -y python3-venv python3-pip python3-dev build-essential \
+  libpq-dev postgresql postgresql-contrib nginx git rsync
+
+# --- 2. Service account and directories ----------------------------------
+if ! id "$APP_USER" >/dev/null 2>&1; then
+  log "Creating service account $APP_USER"
+  useradd --system --home "$BASE_DIR" --shell /usr/sbin/nologin "$APP_USER"
+else
+  log "Service account $APP_USER already exists"
+fi
+mkdir -p "$BASE_DIR" "$MEDIA_DIR"
+chown -R "$APP_USER":"$APP_USER" "$BASE_DIR" "$MEDIA_DIR"
+
+# --- Database --------------------------------------------------------------
+if [ -z "$DB_PASSWORD" ]; then
+  if [ -f "$ENV_FILE" ] && grep -q '^DB_PASSWORD=' "$ENV_FILE"; then
+    # Reuse the password already provisioned on a prior run.
+    DB_PASSWORD="$(sed -n "s/^DB_PASSWORD=//p" "$ENV_FILE" | head -1 | sed "s/^'//;s/'\$//")"
+  else
+    DB_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+    log "Generated a random DB_PASSWORD (saved to $ENV_FILE)"
+  fi
+fi
+
+DB_USER_EXISTS="$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'")"
+if [ "$DB_USER_EXISTS" != "1" ]; then
+  log "Creating PostgreSQL role $DB_USER"
+  sudo -u postgres psql -v ON_ERROR_STOP=1 -c \
+    "CREATE USER \"$DB_USER\" WITH PASSWORD '$(printf '%s' "$DB_PASSWORD" | sed "s/'/''/g")';"
+else
+  log "PostgreSQL role $DB_USER already exists; leaving its password untouched"
+fi
+DB_EXISTS="$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'")"
+if [ "$DB_EXISTS" != "1" ]; then
+  log "Creating database $DB_NAME"
+  sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$DB_NAME\" OWNER \"$DB_USER\";"
+else
+  log "Database $DB_NAME already exists"
+fi
+
+# --- 3. Clone and install the application ---------------------------------
+if [ -d "$SRC_DIR/.git" ]; then
+  log "Updating existing clone at $SRC_DIR"
+  git -C "$SRC_DIR" fetch --prune origin "$BRANCH"
+  git -C "$SRC_DIR" checkout -q "$BRANCH"
+  git -C "$SRC_DIR" reset -q --hard "origin/$BRANCH"
+else
+  log "Cloning $REPO_URL into $SRC_DIR"
+  git clone --branch "$BRANCH" "$REPO_URL" "$SRC_DIR"
+fi
+
+log "Syncing $SRC_DIR -> $APP_DIR"
+rsync -a --exclude '.git' "$SRC_DIR"/ "$APP_DIR"/
+
+if [ ! -x "$VENV_DIR/bin/python" ]; then
+  log "Creating virtualenv at $VENV_DIR"
+  python3 -m venv "$VENV_DIR"
+fi
+"$VENV_DIR/bin/pip" install --upgrade pip
+"$VENV_DIR/bin/pip" install -r "$APP_DIR/requirements.txt"
+
+git -C "$SRC_DIR" rev-parse HEAD | tee "$BASE_DIR/.deployed_commit" >/dev/null
+chown -R "$APP_USER":"$APP_USER" "$BASE_DIR"
+
+# --- 4. Environment file ---------------------------------------------------
+if [ ! -f "$ENV_FILE" ]; then
+  log "Writing $ENV_FILE"
+  SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(64))')"
+  install -m 640 -o root -g "$APP_USER" /dev/null "$ENV_FILE"
+  {
+    # Single-quote every value: it is safe even when the value contains $, ", or spaces,
+    # because this file is sourced by bash (`set -a; . "$ENV_FILE"`).
+    printf "DJANGO_SECRET_KEY='%s'\n" "$(printf '%s' "$SECRET_KEY" | sed "s/'/'\\\\''/g")"
+    printf "DJANGO_DEBUG=0\n"
+    printf "DJANGO_ALLOWED_HOSTS='%s'\n" "$ALLOWED_HOSTS"
+    printf "DB_NAME='%s'\n" "$DB_NAME"
+    printf "DB_USER='%s'\n" "$DB_USER"
+    printf "DB_PASSWORD='%s'\n" "$(printf '%s' "$DB_PASSWORD" | sed "s/'/'\\\\''/g")"
+    printf "DB_HOST=127.0.0.1\n"
+    printf "DB_PORT=5432\n"
+    printf "MEDIA_ROOT=%s\n" "$MEDIA_DIR"
+  } >> "$ENV_FILE"
+  chmod 640 "$ENV_FILE"
+  chown root:"$APP_USER" "$ENV_FILE"
+else
+  log "$ENV_FILE already exists; leaving it untouched (edit DJANGO_ALLOWED_HOSTS manually if needed)"
+fi
+
+# --- 5. Migrate and collectstatic ------------------------------------------
+run_manage() {
+  ( set -a; . "$ENV_FILE"; set +a
+    cd "$APP_DIR"
+    sudo -u "$APP_USER" --preserve-env "$VENV_DIR/bin/python" manage.py "$@" )
+}
+log "Applying database migrations"
+run_manage migrate --noinput
+log "Collecting static files"
+run_manage collectstatic --noinput
+
+if ! run_manage shell -c "import sys; from django.contrib.auth import get_user_model; sys.exit(0 if get_user_model().objects.filter(is_superuser=True).exists() else 1)" >/dev/null 2>&1; then
+  log "No superuser found yet. Create one with:"
+  log "  sudo -u $APP_USER --preserve-env $VENV_DIR/bin/python manage.py createsuperuser"
+  log "(run with: set -a; . $ENV_FILE; set +a; cd $APP_DIR)"
+fi
+
+# --- 6. Gunicorn service -----------------------------------------------
+log "Installing systemd service"
+cp "$APP_DIR/deploy/correspondence-8086.service" /etc/systemd/system/correspondence.service
+systemctl daemon-reload
+systemctl enable --now correspondence
+sleep 2
+systemctl is-active --quiet correspondence || {
+  echo "correspondence service failed to start; check: journalctl -u correspondence -n 50" >&2
+  exit 1
+}
+
+# --- 7. Nginx on port 8086 --------------------------------------------
+log "Installing nginx site"
+cp "$APP_DIR/deploy/nginx-8086.conf.example" /etc/nginx/sites-available/correspondence
+ln -sf /etc/nginx/sites-available/correspondence /etc/nginx/sites-enabled/correspondence
+nginx -t
+systemctl reload nginx
+
+if [ -n "$LAN_SUBNET" ] && command -v ufw >/dev/null 2>&1; then
+  log "Allowing TCP/8086 from $LAN_SUBNET via ufw"
+  ufw allow from "$LAN_SUBNET" to any port 8086 proto tcp
+  ufw reload
+fi
+
+log "Done. Verify with:"
+log "  systemctl is-active correspondence nginx"
+log "  curl -I http://127.0.0.1:8086/"
+log "Edit DJANGO_ALLOWED_HOSTS and server_name in /etc/nginx/sites-available/correspondence for your real LAN IP/hostname."

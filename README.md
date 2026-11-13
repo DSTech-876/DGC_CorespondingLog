@@ -3,6 +3,7 @@
 Django + PostgreSQL starter for a LAN-hosted correspondence register.
 
 ## Included in this first build
+- Branded UI with a system logo (`static/img/logo.svg`, favicon `static/img/logo-mark.svg`) shown on the login page and main navbar — replace these two SVGs with your organization's real artwork when available
 - Staff login using Django authentication
 - Correspondence register with original spreadsheet fields
 - Incoming / outgoing / unspecified direction
@@ -18,18 +19,25 @@ This is a development starter, not yet a production-approved records system. The
 ## Local setup
 1. Install Python 3.11+, PostgreSQL and the requirements.
 2. Create database and user as shown in `deploy/ubuntu-install.sh`.
-3. Copy `.env.example` to `.env` and set secure values. Export variables into the shell or use systemd EnvironmentFile.
+3. Copy `.env.example` to `.env` and set secure values. Export variables into the shell or use systemd EnvironmentFile. Quote any value containing `$`, `` ` ``, `"`, or spaces (e.g. `DB_PASSWORD='Pa$$w0rd'`), since EnvironmentFile/`.env` values are sourced by the shell.
 4. Run:
    ```
    python -m venv .venv
    source .venv/bin/activate
    pip install -r requirements.txt
-   python manage.py makemigrations registry
-python manage.py migrate
+   python manage.py migrate
    python manage.py createsuperuser
    python manage.py runserver 0.0.0.0:8000
    ```
+   `registry/migrations/` is committed to the repo, so `migrate` alone creates all tables; `makemigrations registry` is only needed after changing `registry/models.py`.
 5. Browse to `http://SERVER-LAN-IP:8000/`.
+
+### Quick local test without PostgreSQL
+For a fast local smoke test or `manage.py test` run without standing up PostgreSQL, set `DB_ENGINE=sqlite3` (uses a local `db.sqlite3` file). This is a dev/test convenience only — production always uses PostgreSQL:
+```
+DJANGO_SECRET_KEY=dev DB_ENGINE=sqlite3 python manage.py migrate
+DJANGO_SECRET_KEY=dev DB_ENGINE=sqlite3 python manage.py test
+```
 
 ## Import historical register
 Copy the source file to the server, then preview:
@@ -50,9 +58,11 @@ Use a database backup before importing. The import command does not guess direct
 Create staff users in Django Admin (`/admin/`). Grant `registry.export_correspondence` to users allowed to export. Django's default `is_staff` is for admin access; ordinary staff users can use the main register without admin access. For production, define groups such as Registry Clerk, Supervisor, Read-only and System Administrator.
 
 ## LAN deployment
-For a full Ubuntu walkthrough serving the site on port 8086 (Nginx 8086 -> Gunicorn 127.0.0.1:8087), see `deploy/UBUNTU_DEPLOY_8086.md`, with `deploy/correspondence-8086.service`, `deploy/nginx-8086.conf.example` and the incremental updater `deploy/update-from-github.sh`.
+Recommended: run `sudo ./deploy/install-8086.sh` on a fresh Ubuntu 22.04/24.04 LAN server. It automates the full walkthrough below end-to-end and is safe to re-run (idempotent) — it creates the service account, clones/installs the app, writes `/etc/correspondence-cms.env` with a generated secret key (safely quoting every value), creates the PostgreSQL role/database, migrates, collects static files, and installs the systemd + Nginx units on port 8086. Override `REPO_URL`, `BRANCH`, `DB_PASSWORD`, `ALLOWED_HOSTS`, or `LAN_SUBNET` via environment variables; create the first admin user afterwards with `createsuperuser` (printed at the end of the run).
 
-See `deploy/ubuntu-install.sh` for base packages and PostgreSQL setup. Configure Nginx + Gunicorn with `deploy/correspondence.service` and `deploy/nginx.conf.example`. Replace the example LAN IP/hostname and set a firewall rule allowing TCP/80 only from the office subnet. Add internal HTTPS if credentials or sensitive records cross shared networks.
+For the full manual walkthrough (useful to understand or customize each step) serving the site on port 8086 (Nginx 8086 -> Gunicorn 127.0.0.1:8087), see `deploy/UBUNTU_DEPLOY_8086.md`, with `deploy/correspondence-8086.service`, `deploy/nginx-8086.conf.example` and the incremental updater `deploy/update-from-github.sh`.
+
+Legacy simple alternative: `deploy/ubuntu-install.sh` (base packages + PostgreSQL only) with `deploy/correspondence.service` and `deploy/nginx.conf.example` (plain `/opt/correspondence-cms` layout, port 8001, no atomic app/src split). Replace the example LAN IP/hostname and set a firewall rule allowing TCP/80 only from the office subnet. Add internal HTTPS if credentials or sensitive records cross shared networks.
 
 ## Known next steps
 - Confirm the two blank/ambiguous `FROM` and `TO` columns in the original workbook.
