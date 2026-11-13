@@ -134,7 +134,7 @@ deployed commit with the new one, and copies **only added/modified files** into
 records the new commit.
 
 ```bash
-sudo cp /opt/correspondence-cms/app/deploy/update-from-github.sh /usr/local/bin/correspondence-update
+sudo ln -sf /opt/correspondence-cms/app/deploy/update-from-github.sh /usr/local/bin/correspondence-update
 sudo chmod 750 /usr/local/bin/correspondence-update
 sudo correspondence-update
 ```

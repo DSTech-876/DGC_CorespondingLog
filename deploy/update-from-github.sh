@@ -43,8 +43,7 @@ fi
 git cat-file -e "${OLD_COMMIT}^{commit}" 2>/dev/null || {
   echo "Recorded commit $OLD_COMMIT is unknown to this clone." >&2; exit 1; }
 
-git checkout -q "$BRANCH"
-git merge --ff-only -q "origin/$BRANCH"
+git checkout -q "$NEW_COMMIT"
 
 CHANGED_LIST="$(mktemp)"
 trap 'rm -f "$CHANGED_LIST"' EXIT
@@ -52,8 +51,15 @@ trap 'rm -f "$CHANGED_LIST"' EXIT
 # Added / copied / modified / renamed(new path) / type-changed files only.
 git diff --name-only --diff-filter=ACMRT "$OLD_COMMIT" "$NEW_COMMIT" > "$CHANGED_LIST"
 
+# Upstream deletions are reported but left in place for manual review.
+DELETED="$(git diff --name-only --diff-filter=D "$OLD_COMMIT" "$NEW_COMMIT")"
+
 if [ ! -s "$CHANGED_LIST" ]; then
   log "No file changes between $OLD_COMMIT and $NEW_COMMIT."
+  if [ -n "$DELETED" ]; then
+    log "Files deleted upstream (left untouched on the server, remove manually if intended):"
+    printf '%s\n' "$DELETED" | sed 's/^/  /'
+  fi
   printf '%s\n' "$NEW_COMMIT" > "$STATE_FILE"
   exit 0
 fi
@@ -65,8 +71,7 @@ sed 's/^/  /' "$CHANGED_LIST"
 rsync -a --checksum --files-from="$CHANGED_LIST" "$SRC_DIR/" "$APP_DIR/"
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 
-# Upstream deletions are reported but left in place for manual review.
-DELETED="$(git diff --name-only --diff-filter=D "$OLD_COMMIT" "$NEW_COMMIT")"
+# Report upstream deletions if there are any changed files.
 if [ -n "$DELETED" ]; then
   log "Files deleted upstream (left untouched on the server, remove manually if intended):"
   printf '%s\n' "$DELETED" | sed 's/^/  /'

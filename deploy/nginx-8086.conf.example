@@ -16,7 +16,7 @@ server {
 
     # Replace with authenticated attachment downloads before production use.
     location /media/ {
-        alias /var/lib/correspondence-cms/media/;
+        deny all;
     }
 
     location / {
