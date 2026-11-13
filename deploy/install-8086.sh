@@ -103,9 +103,15 @@ fi
 # --- 3. Clone and install the application ---------------------------------
 if [ -d "$SRC_DIR/.git" ]; then
   log "Updating existing clone at $SRC_DIR"
-  sudo -u "$APP_USER" git -C "$SRC_DIR" fetch --prune origin "$BRANCH"
-  sudo -u "$APP_USER" git -C "$SRC_DIR" checkout -q "$BRANCH"
-  sudo -u "$APP_USER" git -C "$SRC_DIR" reset -q --hard "origin/$BRANCH"
+  # An unreachable GitHub (no DNS/proxy on the server) must not abort a re-run:
+  # the existing checkout is still a valid source for the rest of the install.
+  if sudo -u "$APP_USER" git -C "$SRC_DIR" fetch --prune origin "$BRANCH"; then
+    sudo -u "$APP_USER" git -C "$SRC_DIR" checkout -q "$BRANCH"
+    sudo -u "$APP_USER" git -C "$SRC_DIR" reset -q --hard "origin/$BRANCH"
+  else
+    log "WARNING: could not reach $REPO_URL; continuing with the existing checkout."
+    log "         Fix DNS/proxy and rerun, or use ./update.sh for details."
+  fi
 else
   log "Cloning $REPO_URL into $SRC_DIR"
   sudo -u "$APP_USER" git clone --branch "$BRANCH" "$REPO_URL" "$SRC_DIR"

@@ -131,6 +131,24 @@ curl -s -o /dev/null -w '%{http_code}\n' http://SERVER-LAN-IP:8086/accounts/logi
 
 ## 9. Updating after GitHub changes
 
+### From a local working copy
+
+`update.sh` (repo root) refreshes the checkout it lives in from GitHub and can
+chain straight into the deployment updater:
+
+```bash
+./update.sh                 # pull the latest files into this checkout
+sudo ./update.sh --deploy   # pull, then update /opt/correspondence-cms
+```
+
+It refuses to run when the checkout has uncommitted changes or local commits
+that are not on the remote branch; add `--force` to discard them. If GitHub is
+unreachable (the usual `Could not resolve host: github.com`), it prints the DNS,
+proxy and offline-copy checks to work through. Overridable variables: `BRANCH`,
+`REMOTE`, `REPO_DIR`, `BASE_DIR`.
+
+### On the server
+
 `deploy/update-from-github.sh` fetches the branch, compares the recorded
 deployed commit with the new one, and copies **only added/modified files** into
 `/opt/correspondence-cms/app`. It then runs `pip install`, `migrate` or
