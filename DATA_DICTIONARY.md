@@ -19,4 +19,6 @@ Additional application fields:
 - original_row: source values retained as JSON for migration review
 - created_by / created_at / updated_at: application metadata
 
-The supplied extract also contains two additional blank `FROM` and `TO` headings. Their meaning must be confirmed against the original workbook before mapping them.
+The supplied workbook repeats the `FROM` and `TO` headings. The import maps the first pair to `sender`/`recipient`, falling back to the later pair only when the first is blank; the repeated columns are kept in `original_row` as `FROM (2)` and `TO (2)` until their meaning is confirmed.
+
+Rows that only carry a section banner (`YEAR 2021`, `APRIL`, …) are treated as dividers and are not imported.

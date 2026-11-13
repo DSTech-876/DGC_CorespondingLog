@@ -14,11 +14,11 @@ Django + PostgreSQL starter for a LAN-hosted correspondence register.
 - Audit entries for core changes
 - Role-based user management for administrators (create, edit, deactivate, reset passwords)
 - Self-service profile, password change and email-based password reset
-- Import command for XLSX, CSV and Markdown pipe tables
+- Register import from the browser (upload, preview, then confirm) and a matching `import_register` command, for XLSX, CSV and Markdown pipe tables
 - Bootstrap and Bootstrap Icons are vendored in `static/vendor/`, so the UI works on an isolated LAN with no internet access
 
 ## Important before production
-This is a development starter, not yet a production-approved records system. The current import command deliberately labels imported direction as `Other / Not specified`, because the source register does not contain a reliable incoming/outgoing field. It stores source row values in `original_row`. Review import results before operational use. Do not expose media files publicly; configure authenticated attachment downloads before production, and add a formal retention/backup policy. Sensitive personal/medical references require access controls and an organizational privacy review.
+This is a development starter, not yet a production-approved records system. Imports default to the `Other / Not specified` direction, because the source register does not contain a reliable incoming/outgoing field. It stores source row values in `original_row`. Review import results before operational use. Do not expose media files publicly; configure authenticated attachment downloads before production, and add a formal retention/backup policy. Sensitive personal/medical references require access controls and an organizational privacy review.
 
 ## Local setup
 1. Install Python 3.11+, PostgreSQL and the requirements.
@@ -44,7 +44,17 @@ DJANGO_SECRET_KEY=dev DB_ENGINE=sqlite3 python manage.py test
 ```
 
 ## Import historical register
-Copy the source file to the server, then preview:
+
+### From the browser
+Users with the "add correspondence" permission (records officers and administrators) get **Import register** in the sidebar:
+
+1. Upload the register file (`.xlsx`, `.csv`, `.md`, `.markdown` or `.txt`, up to 25 MB), choose the direction to apply to every row and whether to skip rows already in the register.
+2. Review the preview: rows found, how many will be imported, duplicates, unreadable values and the first 25 rows with their parsed values.
+3. Confirm the import. Nothing is written until this step, and the import is recorded in the audit log.
+
+Duplicates are detected on date received/sent, from, to and description, both against the register and within the uploaded file.
+
+### From the command line
 ```
 python manage.py import_register /path/to/register.xlsx --dry-run
 ```
@@ -56,7 +66,9 @@ After verifying the dry-run count and column mapping:
 ```
 python manage.py import_register /path/to/register.xlsx --skip-existing
 ```
-Use a database backup before importing. The import command does not guess direction or transform ambiguous values. It will not import section labels such as YEAR 2021 or APRIL.
+`--direction IN|OUT|OTHER` sets the direction for imported rows (default `OTHER`).
+
+Use a database backup before importing. The import does not guess direction or transform ambiguous values. It will not import section labels such as YEAR 2021 or APRIL. Dates that cannot be read (for example `22-23/9/2025`) are left blank on the record, reported as warnings, and preserved verbatim in `original_row`.
 
 ## Seeding the first administrator
 `python manage.py seed_admin` creates the initial superuser without an interactive prompt and is safe to re-run. It reads `DJANGO_SUPERUSER_USERNAME` (default `admin`), `DJANGO_SUPERUSER_EMAIL` and `DJANGO_SUPERUSER_PASSWORD`, or the matching `--username`, `--email` and `--password` options. When no password is supplied, a strong one is generated and printed once — store it securely and change it after the first sign in. If the account already exists, the command restores superuser/staff/active privileges and leaves the password alone unless `--reset-password` is given:

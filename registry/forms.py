@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from django import forms
 
+from .importer import SUPPORTED_SUFFIXES
 from .models import Correspondence, Attachment, Action, CollectionRecord
 
 
@@ -82,3 +85,38 @@ class CollectionRecordForm(BootstrapFormMixin, forms.ModelForm):
             "collection_date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 2}),
         }
+
+
+class RegisterImportForm(BootstrapFormMixin, forms.Form):
+    """Upload step of the register import wizard."""
+
+    MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+
+    file = forms.FileField(
+        label="Register file",
+        help_text="Excel workbook (.xlsx), CSV or Markdown table exported from the correspondence log.",
+        widget=forms.ClearableFileInput(attrs={"accept": ",".join(SUPPORTED_SUFFIXES)}),
+    )
+    direction = forms.ChoiceField(
+        label="Direction for imported rows",
+        choices=Correspondence.Direction.choices,
+        initial=Correspondence.Direction.OTHER,
+        help_text="Historical registers rarely state direction; it can be corrected per record afterwards.",
+    )
+    skip_existing = forms.BooleanField(
+        label="Skip rows already in the register",
+        required=False,
+        initial=True,
+        help_text="Matches on date received/sent, from, to and description.",
+    )
+
+    def clean_file(self):
+        upload = self.cleaned_data["file"]
+        suffix = Path(upload.name).suffix.lower()
+        if suffix not in SUPPORTED_SUFFIXES:
+            raise forms.ValidationError(
+                "Unsupported file type. Use one of: " + ", ".join(SUPPORTED_SUFFIXES)
+            )
+        if upload.size > self.MAX_UPLOAD_BYTES:
+            raise forms.ValidationError("The file is larger than the 25 MB upload limit.")
+        return upload
