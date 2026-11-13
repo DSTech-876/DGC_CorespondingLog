@@ -1,0 +1,14 @@
+[Unit]
+Description=Correspondence Management System (Gunicorn)
+After=network.target postgresql.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/correspondence-cms
+EnvironmentFile=/etc/correspondence-cms.env
+ExecStart=/opt/correspondence-cms/.venv/bin/gunicorn config.wsgi:application --workers 3 --bind 127.0.0.1:8001
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

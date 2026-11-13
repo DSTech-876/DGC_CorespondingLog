@@ -1,0 +1,1 @@
+{% extends "base.html" %}{% block title %}Sign in{% endblock %}{% block content %}<div class="row justify-content-center mt-5"><div class="col-md-4"><div class="card p-4"><h3 class="mb-3">Staff sign in</h3><form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary w-100">Sign in</button></form></div></div></div>{% endblock %}
