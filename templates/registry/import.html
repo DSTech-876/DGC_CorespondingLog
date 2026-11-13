@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Import register{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Import register</h1>
+    <p class="subtitle">Load historical correspondence from the Excel log, a CSV export or a Markdown table.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="{% url 'correspondence_list' %}"><i class="bi bi-arrow-left me-1"></i> Back to register</a>
+</div>
+
+{% if preview %}
+  <div class="card p-4 mb-4">
+    <h2 class="h5 mb-3">Preview — {{ filename }}</h2>
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-3">
+        <div class="border rounded p-3">
+          <div class="small text-secondary">Rows found</div>
+          <div class="fs-4">{{ parsed.records|length }}</div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="border rounded p-3">
+          <div class="small text-secondary">Will be imported</div>
+          <div class="fs-4">{{ to_import }}</div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="border rounded p-3">
+          <div class="small text-secondary">Duplicates</div>
+          <div class="fs-4">{{ duplicates }}</div>
+          <div class="small text-secondary">{% if skip_existing %}will be skipped{% else %}will be imported again{% endif %}</div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="border rounded p-3">
+          <div class="small text-secondary">Rows with warnings</div>
+          <div class="fs-4">{{ warning_count }}</div>
+        </div>
+      </div>
+    </div>
+
+    <p class="small text-secondary">
+      Imported rows are recorded as <strong>{{ direction_label }}</strong>.
+      Divider rows skipped: {{ parsed.divider_rows }}. Blank rows skipped: {{ parsed.blank_rows }}.
+    </p>
+
+    {% if parsed.unmapped_fields %}
+      <div class="alert alert-warning">
+        These register columns were not found in the file and will be left blank:
+        {{ parsed.unmapped_fields|join:", " }}.
+      </div>
+    {% endif %}
+
+    {% if warning_records %}
+      <div class="alert alert-warning">
+        <strong>Some values could not be read.</strong> The original cell contents are still stored with each record.
+        <ul class="mb-0 mt-2">
+          {% for record in warning_records %}
+            <li>Row {{ record.row_number }}: {{ record.warnings|join:" " }}</li>
+          {% endfor %}
+        </ul>
+        {% if warning_count > preview_limit %}
+          <div class="small mt-2">…and {{ warning_count|add:"-25" }} more.</div>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>Row</th><th>Date received/sent</th><th>From</th><th>To</th>
+            <th>Description</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for record in preview %}
+            <tr>
+              <td>{{ record.row_number }}</td>
+              <td>{{ record.values.date_received_sent|default:"—" }}</td>
+              <td>{{ record.values.sender|truncatechars:40 }}</td>
+              <td>{{ record.values.recipient|truncatechars:40 }}</td>
+              <td>{{ record.values.description|truncatechars:70 }}</td>
+              <td>
+                {% if record.duplicate %}
+                  <span class="pill pill-other">Duplicate</span>
+                {% else %}
+                  <span class="pill pill-info">New</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if parsed.records|length > preview_limit %}
+      <p class="small text-secondary">Showing the first {{ preview_limit }} of {{ parsed.records|length }} rows.</p>
+    {% endif %}
+
+    <form method="post" action="{% url 'register_import_confirm' %}" class="d-flex gap-2 mt-3">
+      {% csrf_token %}
+      <button class="btn btn-primary" type="submit" name="action" value="import">
+        <i class="bi bi-database-add me-1"></i> Import {{ to_import }} record(s)
+      </button>
+      <button class="btn btn-outline-secondary" type="submit" name="action" value="cancel">Cancel</button>
+    </form>
+  </div>
+{% endif %}
+
+<div class="card p-4">
+  <h2 class="h5 mb-3">{% if preview %}Upload a different file{% else %}Upload a file{% endif %}</h2>
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    {% include "partials/form.html" with form=form wrapper_class="col-md-6" %}
+    <div class="d-flex gap-2 mt-4">
+      <button class="btn btn-primary" type="submit"><i class="bi bi-upload me-1"></i> Preview import</button>
+      <a class="btn btn-outline-secondary" href="{% url 'correspondence_list' %}">Cancel</a>
+    </div>
+  </form>
+  <p class="small text-secondary mt-3 mb-0">
+    Nothing is saved until the preview is confirmed. Every imported row keeps a copy of its
+    original spreadsheet values for later verification.
+  </p>
+</div>
+{% endblock %}

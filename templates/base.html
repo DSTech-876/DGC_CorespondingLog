@@ -37,6 +37,11 @@
           <i class="bi bi-plus-square"></i> Register new
         </a>
       {% endif %}
+      {% if perms.registry.add_correspondence %}
+        <a class="sidebar-link {% if request.resolver_match.url_name == 'register_import' %}active{% endif %}" href="{% url 'register_import' %}">
+          <i class="bi bi-file-earmark-arrow-up"></i> Import register
+        </a>
+      {% endif %}
       {% if perms.registry.export_correspondence %}
         <a class="sidebar-link" href="{% url 'export_csv' %}">
           <i class="bi bi-filetype-csv"></i> Export CSV

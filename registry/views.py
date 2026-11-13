@@ -1,5 +1,7 @@
 import csv
 from pathlib import Path
+from uuid import uuid4
+from django.conf import settings
 from django.http import FileResponse, Http404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -8,7 +10,11 @@ from django.db.models import Q, Count
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from .models import Correspondence, AuditLog, Attachment
-from .forms import CorrespondenceForm, AttachmentForm, ActionForm, CollectionRecordForm
+from .importer import (
+    PREVIEW_LIMIT, ImportError_, flag_duplicates, import_records, parse_rows,
+    rows_from_path, rows_from_stream,
+)
+from .forms import CorrespondenceForm, AttachmentForm, ActionForm, CollectionRecordForm, RegisterImportForm
 
 @login_required
 def dashboard(request):
@@ -123,3 +129,124 @@ def attachment_download(request, attachment_id):
         raise Http404("Attachment not found")
     response = FileResponse(file_handle, as_attachment=True, filename=attachment.original_filename or Path(attachment.file.name).name)
     return response
+
+# ------------------------------------------------------------------ importing
+IMPORT_SESSION_KEY = "pending_register_import"
+
+
+def _staging_dir():
+    path = Path(settings.MEDIA_ROOT) / "import_staging"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _stage_upload(upload):
+    """Save the upload so the confirm step does not need a second upload."""
+    token = f"{uuid4().hex}{Path(upload.name).suffix.lower()}"
+    destination = _staging_dir() / token
+    with destination.open("wb") as handle:
+        for chunk in upload.chunks():
+            handle.write(chunk)
+    return token
+
+
+def _staged_path(token):
+    """Resolve a staged file token, refusing anything outside the staging dir."""
+    if not token or "/" in token or "\\" in token or ".." in token:
+        return None
+    path = _staging_dir() / token
+    return path if path.is_file() else None
+
+
+def _discard_staged(request):
+    pending = request.session.pop(IMPORT_SESSION_KEY, None)
+    if not pending:
+        return
+    path = _staged_path(pending.get("token"))
+    if path:
+        path.unlink(missing_ok=True)
+
+
+@login_required
+@permission_required("registry.add_correspondence", raise_exception=True)
+def register_import(request):
+    """Upload a register file and preview what would be imported."""
+    form = RegisterImportForm(request.POST or None, request.FILES or None)
+    context = {"form": form}
+    if request.method == "POST" and form.is_valid():
+        _discard_staged(request)
+        upload = form.cleaned_data["file"]
+        try:
+            parsed = parse_rows(rows_from_stream(upload, upload.name))
+        except ImportError_ as exc:
+            form.add_error("file", str(exc))
+            return render(request, "registry/import.html", context)
+        if not parsed.records:
+            form.add_error("file", "No correspondence rows were found in this file.")
+            return render(request, "registry/import.html", context)
+
+        flag_duplicates(parsed)
+        token = _stage_upload(upload)
+        request.session[IMPORT_SESSION_KEY] = {
+            "token": token,
+            "filename": upload.name,
+            "direction": form.cleaned_data["direction"],
+            "skip_existing": form.cleaned_data["skip_existing"],
+        }
+        duplicates = sum(1 for r in parsed.records if r.duplicate)
+        context.update({
+            "preview": parsed.records[:PREVIEW_LIMIT],
+            "preview_limit": PREVIEW_LIMIT,
+            "parsed": parsed,
+            "filename": upload.name,
+            "duplicates": duplicates,
+            "to_import": len(parsed.records) - (duplicates if form.cleaned_data["skip_existing"] else 0),
+            "skip_existing": form.cleaned_data["skip_existing"],
+            "direction_label": Correspondence.Direction(form.cleaned_data["direction"]).label,
+            "warning_records": parsed.warning_records[:PREVIEW_LIMIT],
+            "warning_count": len(parsed.warning_records),
+        })
+    return render(request, "registry/import.html", context)
+
+
+@login_required
+@permission_required("registry.add_correspondence", raise_exception=True)
+def register_import_confirm(request):
+    """Import the previously previewed file."""
+    if request.method != "POST":
+        return redirect("register_import")
+    pending = request.session.get(IMPORT_SESSION_KEY)
+    path = _staged_path(pending.get("token")) if pending else None
+    if path is None:
+        messages.error(request, "The uploaded file is no longer available. Please upload it again.")
+        return redirect("register_import")
+    if request.POST.get("action") == "cancel":
+        _discard_staged(request)
+        messages.info(request, "Import cancelled; nothing was changed.")
+        return redirect("register_import")
+
+    try:
+        parsed = parse_rows(rows_from_path(path))
+        result = import_records(
+            parsed,
+            user=request.user,
+            direction=pending["direction"],
+            skip_existing=pending["skip_existing"],
+        )
+    except ImportError_ as exc:
+        messages.error(request, str(exc))
+        _discard_staged(request)
+        return redirect("register_import")
+
+    AuditLog.objects.create(
+        user=request.user,
+        event="Register imported",
+        details=f"{pending['filename']}: {result.summary}",
+    )
+    _discard_staged(request)
+    messages.success(
+        request,
+        f"Imported {result.created} record(s) from {pending['filename']}. "
+        f"Skipped {result.skipped} duplicate(s).",
+    )
+    return redirect("correspondence_list")

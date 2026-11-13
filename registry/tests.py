@@ -1,16 +1,22 @@
+import csv
 import os
 import re
 import socket
-from io import StringIO
+import tempfile
+from datetime import date, datetime
+from io import BytesIO, StringIO
+from pathlib import Path
 from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
-from registry.models import AuditLog, UserProfile
+from registry.importer import import_records, parse_rows, rows_from_stream
+from registry.models import AuditLog, Correspondence, UserProfile
 from registry.roles import apply_role
 
 
@@ -437,3 +443,150 @@ class RegistryPermissionTests(TestCase):
         self.client.force_login(self.viewer)
         response = self.client.get(reverse("dashboard"))
         self.assertNotContains(response, reverse("correspondence_create"))
+
+
+class RegisterImportTests(TestCase):
+    """Covers parsing the historical log and the browser import workflow."""
+
+    HEADER = [
+        "DATE RECEIVED/SENT", "DATE OF DOCUMENT", "FROM", "TO", "FROM", "TO",
+        "COPY TO or THRU'", "DESCRIPTION", "Lab#/ Ref #/Voucher#/Invoice#",
+        "SUPERVISOR'S DIRECTIVES/COMMENTS OR GENERAL NOTATIONS/ACTION TAKEN",
+        "RECEIVED/COLLECTED BY", "DATE RECEIVED/COLLECTED BY", "FURTHER COMMENTS",
+    ]
+
+    def setUp(self):
+        self.officer = get_user_model().objects.create_user("importer", password="pass12345!")
+        self.client.force_login(self.officer)
+
+    def _workbook(self, rows, name="register.xlsx"):
+        from openpyxl import Workbook
+
+        workbook = Workbook()
+        sheet = workbook.active
+        for row in rows:
+            sheet.append(row)
+        buffer = BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+        return SimpleUploadedFile(
+            name, buffer.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    def _sample_rows(self):
+        return [
+            ["", "", "", "", "", "", "", "CORRESPONDENCE LOG"],
+            self.HEADER,
+            ["", "", "", "", "", "", "", "YEAR 2021"],
+            [datetime(2021, 4, 8), datetime(2021, 4, 8), "Mr. Stephenson", "Mr. Newland",
+             "", "", "", "Letter Re: Confirmation", "LAB-1", "Filed", "Mr. Newland",
+             datetime(2021, 4, 9), "none"],
+            ["22-23/9/2025", "", "Ms. Green", "Mrs. Fraser", "Hostinger Ltd.", "Ms. Green",
+             "", "Invoice query", "", "", "", "", ""],
+        ]
+
+    def test_parses_dates_divider_rows_and_duplicate_columns(self):
+        parsed = parse_rows(rows_from_stream(self._workbook(self._sample_rows()), "register.xlsx"))
+        self.assertEqual(len(parsed.records), 2)
+        self.assertEqual(parsed.divider_rows, 1)
+
+        first, second = parsed.records
+        self.assertEqual(first.values["date_received_sent"], date(2021, 4, 8))
+        self.assertEqual(first.values["date_received_collected"], date(2021, 4, 9))
+        self.assertEqual(first.values["sender"], "Mr. Stephenson")
+        # An unreadable date is reported but the source value is preserved.
+        self.assertIsNone(second.values["date_received_sent"])
+        self.assertTrue(second.warnings)
+        self.assertEqual(second.original_row["DATE RECEIVED/SENT"], "22-23/9/2025")
+        # The workbook repeats FROM/TO; the second pair is kept as source data.
+        self.assertEqual(second.values["sender"], "Ms. Green")
+        self.assertEqual(second.original_row["FROM (2)"], "Hostinger Ltd.")
+
+    def test_import_creates_records_with_reference_ids(self):
+        parsed = parse_rows(rows_from_stream(self._workbook(self._sample_rows()), "register.xlsx"))
+        result = import_records(parsed, user=self.officer)
+        self.assertEqual(result.created, 2)
+        self.assertEqual(Correspondence.objects.count(), 2)
+        for item in Correspondence.objects.all():
+            self.assertRegex(item.reference_id, r"^COR-\d{4}-\d{6}$")
+
+    def test_dry_run_changes_nothing(self):
+        parsed = parse_rows(rows_from_stream(self._workbook(self._sample_rows()), "register.xlsx"))
+        result = import_records(parsed, dry_run=True)
+        self.assertEqual(result.created, 2)
+        self.assertEqual(Correspondence.objects.count(), 0)
+
+    def test_skip_existing_ignores_rows_already_registered(self):
+        rows = self._sample_rows()
+        parse_and_import = lambda: import_records(
+            parse_rows(rows_from_stream(self._workbook(rows), "register.xlsx")),
+            skip_existing=True,
+        )
+        parse_and_import()
+        result = parse_and_import()
+        self.assertEqual(result.created, 0)
+        self.assertEqual(result.skipped, 2)
+        self.assertEqual(Correspondence.objects.count(), 2)
+
+    def test_preview_then_confirm_imports_the_uploaded_file(self):
+        response = self.client.post(reverse("register_import"), {
+            "file": self._workbook(self._sample_rows()),
+            "direction": Correspondence.Direction.INCOMING,
+            "skip_existing": "on",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Letter Re: Confirmation")
+        self.assertEqual(Correspondence.objects.count(), 0, "preview must not write")
+
+        response = self.client.post(reverse("register_import_confirm"), {"action": "import"}, follow=True)
+        self.assertEqual(Correspondence.objects.count(), 2)
+        self.assertContains(response, "Imported 2 record(s)")
+        self.assertEqual(
+            set(Correspondence.objects.values_list("direction", flat=True)),
+            {Correspondence.Direction.INCOMING},
+        )
+        self.assertTrue(AuditLog.objects.filter(event="Register imported").exists())
+
+    def test_cancelling_the_preview_discards_the_upload(self):
+        self.client.post(reverse("register_import"), {
+            "file": self._workbook(self._sample_rows()),
+            "direction": Correspondence.Direction.OTHER,
+        })
+        self.client.post(reverse("register_import_confirm"), {"action": "cancel"})
+        self.assertEqual(Correspondence.objects.count(), 0)
+        response = self.client.post(reverse("register_import_confirm"), {"action": "import"}, follow=True)
+        self.assertContains(response, "no longer available")
+
+    def test_file_without_register_headings_is_rejected(self):
+        upload = self._workbook([["Some", "other", "sheet"], ["a", "b", "c"]])
+        response = self.client.post(reverse("register_import"), {
+            "file": upload, "direction": Correspondence.Direction.OTHER,
+        })
+        self.assertContains(response, "Could not identify the register header row")
+        self.assertEqual(Correspondence.objects.count(), 0)
+
+    def test_unsupported_file_type_is_rejected(self):
+        upload = SimpleUploadedFile("notes.pdf", b"%PDF-1.4", content_type="application/pdf")
+        response = self.client.post(reverse("register_import"), {
+            "file": upload, "direction": Correspondence.Direction.OTHER,
+        })
+        self.assertContains(response, "Unsupported file type")
+
+    def test_viewer_cannot_reach_the_import_screen(self):
+        viewer = get_user_model().objects.create_user("importviewer", password="pass12345!")
+        apply_role(viewer, UserProfile.Role.VIEWER)
+        self.client.force_login(viewer)
+        self.assertEqual(self.client.get(reverse("register_import")).status_code, 403)
+
+    def test_management_command_imports_a_csv_file(self):
+        path = Path(tempfile.mkdtemp()) / "register.csv"
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(self.HEADER)
+            writer.writerow(["8-Apr-21", "8-Apr-21", "A", "B", "", "", "", "Letter", "", "", "", "", ""])
+        out = StringIO()
+        call_command("import_register", str(path), stdout=out)
+        self.assertIn("Imported: 1", out.getvalue())
+        item = Correspondence.objects.get()
+        self.assertEqual(item.date_received_sent, date(2021, 4, 8))
