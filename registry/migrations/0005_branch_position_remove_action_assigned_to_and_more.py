@@ -3,6 +3,30 @@
 from django.db import migrations, models
 
 
+def archive_action_from_to_fields(apps, schema_editor):
+    """Archive Action from/to fields to a JSON field before removing columns."""
+    Action = apps.get_model('registry', 'Action')
+    
+    for action in Action.objects.all():
+        # Only archive if there's data to preserve
+        if any([action.from_name, action.from_branch, action.from_position, 
+                action.to_branch, action.to_position, action.assigned_to]):
+            action.archived_from_to_data = {
+                'from_name': action.from_name,
+                'from_branch': action.from_branch,
+                'from_position': action.from_position,
+                'to_branch': action.to_branch,
+                'to_position': action.to_position,
+                'assigned_to': action.assigned_to,
+            }
+            action.save(update_fields=['archived_from_to_data'])
+
+
+def reverse_archive(apps, schema_editor):
+    """Reverse migration (no-op for data migration)."""
+    pass
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -30,6 +54,15 @@ class Migration(migrations.Migration):
                 'ordering': ['name'],
             },
         ),
+        # Add archive field to preserve from/to data before removing columns
+        migrations.AddField(
+            model_name='action',
+            name='archived_from_to_data',
+            field=models.JSONField(default=dict, blank=True, help_text="Preserves from_name, from_branch, from_position, to_branch, to_position, assigned_to after removal from the model."),
+        ),
+        # Archive existing from/to data before removing the columns
+        migrations.RunPython(archive_action_from_to_fields, reverse_archive),
+        # Now remove the columns
         migrations.RemoveField(
             model_name='action',
             name='assigned_to',

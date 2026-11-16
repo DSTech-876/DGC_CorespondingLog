@@ -28,7 +28,7 @@ def reverse_sync(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('registry', '0004_action_from_branch_action_from_name_and_more'),
+        ('registry', '0005_branch_position_remove_action_assigned_to_and_more'),
     ]
 
     operations = [

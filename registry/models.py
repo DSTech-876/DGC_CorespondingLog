@@ -134,6 +134,7 @@ class Action(models.Model):
     action_date = models.DateField(default=timezone.localdate)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
     entered_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    archived_from_to_data = models.JSONField(default=dict, blank=True, help_text="Preserves from_name, from_branch, from_position, to_branch, to_position, assigned_to after removal from the model.")
     created_at = models.DateTimeField(auto_now_add=True)
     class Meta:
         ordering = ["-action_date", "-id"]
