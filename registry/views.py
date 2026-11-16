@@ -10,7 +10,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q, Count
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
-from .models import Correspondence, AuditLog, Attachment, Action
+from .models import Correspondence, AuditLog, Attachment, Action, get_prefetch_latest_action
 from .importer import (
     PREVIEW_LIMIT, ImportError_, flag_duplicates, import_records, parse_rows,
     rows_from_path, rows_from_stream,
@@ -47,12 +47,13 @@ def correspondence_list(request):
         qs = qs.filter(direction=direction)
     if start: qs = qs.filter(date_received_sent__gte=start)
     if end: qs = qs.filter(date_received_sent__lte=end)
+    qs = qs.prefetch_related(get_prefetch_latest_action())
     page = Paginator(qs, 25).get_page(request.GET.get("page"))
     return render(request, "registry/list.html", {"page": page, "q": q, "direction": direction, "start": start, "end": end})
 
 @login_required
 def correspondence_detail(request, pk):
-    item = get_object_or_404(Correspondence, pk=pk)
+    item = get_object_or_404(Correspondence.objects.prefetch_related(get_prefetch_latest_action()), pk=pk)
     return render(request, "registry/detail.html", {"item": item, "attachment_form": AttachmentForm(), "action_form": ActionForm(), "collection_form": CollectionRecordForm()})
 
 @login_required
@@ -128,7 +129,7 @@ def export_csv(request):
     response["Content-Disposition"] = 'attachment; filename="correspondence-export.csv"'
     writer = csv.writer(response)
     writer.writerow(["System ID", "Direction", "Origin", "Date Received/Sent", "Date of Document", "From", "To", "Copy To/Thru", "Description", "Lab/Ref/Voucher/Invoice", "Supervisor Directives", "Received/Collected By", "Date Received/Collected", "Further Comments", "Status"])
-    for x in Correspondence.objects.all():
+    for x in Correspondence.objects.prefetch_related(get_prefetch_latest_action()):
         writer.writerow([x.reference_id, x.get_direction_display(), x.get_origin_display(), x.date_received_sent, x.date_of_document, x.sender, x.recipient, x.copy_to_thru, x.description, x.external_reference, x.supervisor_directives, x.received_collected_by, x.date_received_collected, x.further_comments, x.current_status])
     return response
 

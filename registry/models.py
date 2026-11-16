@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import OuterRef, Subquery, Prefetch
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -95,7 +96,19 @@ class Correspondence(models.Model):
     @property
     def current_status(self):
         """Overall status shown in the register: the latest action's status,
-        or "Not Addressed" when no action has been logged yet."""
+        or "Not Addressed" when no action has been logged yet.
+        
+        Uses prefetched_latest_action if available (via prefetch_related_objects),
+        otherwise queries the database."""
+        # Check if we have a prefetched latest action
+        if hasattr(self, 'prefetched_latest_action'):
+            actions = self.prefetched_latest_action
+            latest_action = actions[0] if actions else None
+            if latest_action is None:
+                return "Not Addressed"
+            return latest_action.get_status_display()
+        
+        # Fall back to querying if not prefetched
         latest_action = self.actions.first()  # Action.Meta orders by -action_date, -id
         if latest_action is None:
             return "Not Addressed"
@@ -171,3 +184,17 @@ class AuditLog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     class Meta:
         ordering = ["-created_at"]
+
+
+def get_prefetch_latest_action():
+    """Get a Prefetch object for the latest action of a Correspondence.
+    
+    Usage: Correspondence.objects.prefetch_related(get_prefetch_latest_action())
+    
+    Sets prefetched_latest_action on the correspondence instance.
+    """
+    return Prefetch(
+        'actions',
+        queryset=Action.objects.all()[:1],
+        to_attr='prefetched_latest_action'
+    )
