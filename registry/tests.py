@@ -540,6 +540,81 @@ class BranchPositionDropdownTests(TestCase):
         self.assertEqual(item.sender_branch, "Chemistry")
         self.assertEqual(item.sender_position, "Supervisor")
 
+    def test_legacy_branch_position_values_appear_in_edit_form(self):
+        """Legacy free-text values not in the lookup table should still appear as options."""
+        self.client.force_login(self.officer)
+        # Create a correspondence with legacy values not in the Branch/Position tables
+        item = Correspondence.objects.create(
+            direction=Correspondence.Direction.OTHER,
+            sender="Old Sender",
+            sender_branch="Old Branch",  # Not in Branch table
+            sender_position="Old Position",  # Not in Position table
+            recipient="Old Recipient",
+            recipient_branch="Legacy Branch",  # Not in Branch table
+            recipient_position="Legacy Position",  # Not in Position table
+        )
+        
+        # Load the edit form for this correspondence
+        response = self.client.get(reverse("correspondence_edit", args=[item.pk]))
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        
+        # Verify that legacy values are included in the dropdown choices
+        branch_choices = form.fields["sender_branch"].widget.choices
+        position_choices = form.fields["sender_position"].widget.choices
+        branch_choices_recipient = form.fields["recipient_branch"].widget.choices
+        position_choices_recipient = form.fields["recipient_position"].widget.choices
+        
+        # Check that legacy values are in the choices
+        branch_choice_values = [val for val, label in branch_choices]
+        self.assertIn("Old Branch", branch_choice_values, "Legacy sender_branch should be in choices")
+        self.assertIn("Legacy Branch", branch_choice_values, "Legacy recipient_branch should be in choices")
+        
+        position_choice_values = [val for val, label in position_choices]
+        self.assertIn("Old Position", position_choice_values, "Legacy sender_position should be in choices")
+        
+        position_choice_values_recipient = [val for val, label in position_choices_recipient]
+        self.assertIn("Legacy Position", position_choice_values_recipient, "Legacy recipient_position should be in choices")
+
+    def test_submitting_edit_form_preserves_legacy_values(self):
+        """When editing with legacy values, submitting should preserve them without clearing."""
+        self.client.force_login(self.officer)
+        # Create a correspondence with legacy values not in the Branch/Position tables
+        item = Correspondence.objects.create(
+            direction=Correspondence.Direction.OTHER,
+            sender="Old Sender",
+            sender_branch="Old Branch",
+            sender_position="Old Position",
+            recipient="Old Recipient",
+            recipient_branch="Legacy Branch",
+            recipient_position="Legacy Position",
+        )
+        
+        # Submit the form without changing the branch/position fields
+        # This simulates editing an unrelated field
+        response = self.client.post(
+            reverse("correspondence_edit", args=[item.pk]),
+            {
+                "direction": Correspondence.Direction.OTHER,
+                "sender": "Old Sender",
+                "sender_branch": "Old Branch",
+                "sender_position": "Old Position",
+                "recipient": "Old Recipient - Updated",  # Only change recipient
+                "recipient_branch": "Legacy Branch",
+                "recipient_position": "Legacy Position",
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify the values are preserved after save
+        item.refresh_from_db()
+        self.assertEqual(item.sender_branch, "Old Branch")
+        self.assertEqual(item.sender_position, "Old Position")
+        self.assertEqual(item.recipient_branch, "Legacy Branch")
+        self.assertEqual(item.recipient_position, "Legacy Position")
+        self.assertEqual(item.recipient, "Old Recipient - Updated")
+
 
 class RegisterImportTests(TestCase):
     """Covers parsing the historical log and the browser import workflow."""

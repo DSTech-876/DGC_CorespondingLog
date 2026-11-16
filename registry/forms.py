@@ -70,8 +70,33 @@ class CorrespondenceForm(BootstrapFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        branch_choices = [("", "---------")] + [(b.name, b.name) for b in Branch.objects.all()]
-        position_choices = [("", "---------")] + [(p.name, p.name) for p in Position.objects.all()]
+        
+        # Get all admin-managed branches and positions
+        managed_branches = {b.name for b in Branch.objects.all()}
+        managed_positions = {p.name for p in Position.objects.all()}
+        
+        # Build branch choices, including current values if they exist in the instance
+        branch_choices = [("", "---------")]
+        branch_names = set(managed_branches)
+        if self.instance and self.instance.pk:
+            # Add current values to the set if they're not in managed list
+            if self.instance.sender_branch and self.instance.sender_branch not in managed_branches:
+                branch_names.add(self.instance.sender_branch)
+            if self.instance.recipient_branch and self.instance.recipient_branch not in managed_branches:
+                branch_names.add(self.instance.recipient_branch)
+        branch_choices += [(name, name) for name in sorted(branch_names)]
+        
+        # Build position choices, including current values if they exist in the instance
+        position_choices = [("", "---------")]
+        position_names = set(managed_positions)
+        if self.instance and self.instance.pk:
+            # Add current values to the set if they're not in managed list
+            if self.instance.sender_position and self.instance.sender_position not in managed_positions:
+                position_names.add(self.instance.sender_position)
+            if self.instance.recipient_position and self.instance.recipient_position not in managed_positions:
+                position_names.add(self.instance.recipient_position)
+        position_choices += [(name, name) for name in sorted(position_names)]
+        
         for field_name in ("sender_branch", "recipient_branch"):
             self.fields[field_name].widget.choices = branch_choices
         for field_name in ("sender_position", "recipient_position"):
