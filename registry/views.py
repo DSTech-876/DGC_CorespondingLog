@@ -109,7 +109,7 @@ def action_edit(request, pk):
         AuditLog.objects.create(user=request.user, correspondence=obj.correspondence, event="Action updated", details=f"{obj.get_status_display()}: {obj.action_text[:250]}")
         messages.success(request, "Action updated.")
         return redirect("correspondence_detail", pk=obj.correspondence_id)
-    return render(request, "registry/form.html", {"form": form, "title": "Edit action"})
+    return render(request, "registry/form_action.html", {"form": form, "title": "Edit action", "correspondence": obj.correspondence})
 
 @login_required
 @permission_required("registry.add_collectionrecord", raise_exception=True)
