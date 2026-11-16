@@ -86,6 +86,30 @@ class Correspondence(models.Model):
     def __str__(self):
         return f"{self.reference_id or 'Unnumbered'} — {self.description[:70]}"
 
+class Branch(models.Model):
+    """Admin-managed list of branches offered in the From/To branch dropdowns."""
+
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Position(models.Model):
+    """Admin-managed list of positions offered in the From/To position dropdowns."""
+
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class Attachment(models.Model):
     correspondence = models.ForeignKey(Correspondence, on_delete=models.CASCADE, related_name="attachments")
     file = models.FileField(upload_to="correspondence/%Y/%m/")
@@ -109,12 +133,6 @@ class Action(models.Model):
     action_text = models.TextField()
     action_date = models.DateField(default=timezone.localdate)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
-    from_name = models.CharField(max_length=255, blank=True)
-    from_branch = models.CharField(max_length=255, blank=True)
-    from_position = models.CharField(max_length=255, blank=True)
-    assigned_to = models.CharField(max_length=255, blank=True)
-    to_branch = models.CharField(max_length=255, blank=True)
-    to_position = models.CharField(max_length=255, blank=True)
     entered_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
     class Meta:

@@ -3,7 +3,7 @@ from pathlib import Path
 from django import forms
 
 from .importer import SUPPORTED_SUFFIXES
-from .models import Correspondence, Attachment, Action, CollectionRecord
+from .models import Correspondence, Attachment, Action, CollectionRecord, Branch, Position
 
 
 class BootstrapFormMixin:
@@ -55,11 +55,11 @@ class CorrespondenceForm(BootstrapFormMixin, forms.ModelForm):
             # Model TextFields that hold a single line render as oversized
             # textareas by default, so they are shown as plain inputs.
             "sender": forms.TextInput(),
-            "sender_branch": forms.TextInput(),
-            "sender_position": forms.TextInput(),
+            "sender_branch": forms.Select(),
+            "sender_position": forms.Select(),
             "recipient": forms.TextInput(),
-            "recipient_branch": forms.TextInput(),
-            "recipient_position": forms.TextInput(),
+            "recipient_branch": forms.Select(),
+            "recipient_position": forms.Select(),
             "copy_to_thru": forms.TextInput(),
             "external_reference": forms.TextInput(),
             "received_collected_by": forms.TextInput(),
@@ -67,6 +67,15 @@ class CorrespondenceForm(BootstrapFormMixin, forms.ModelForm):
             "supervisor_directives": forms.Textarea(attrs={"rows": 3}),
             "further_comments": forms.Textarea(attrs={"rows": 3}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        branch_choices = [("", "---------")] + [(b.name, b.name) for b in Branch.objects.all()]
+        position_choices = [("", "---------")] + [(p.name, p.name) for p in Position.objects.all()]
+        for field_name in ("sender_branch", "recipient_branch"):
+            self.fields[field_name].widget.choices = branch_choices
+        for field_name in ("sender_position", "recipient_position"):
+            self.fields[field_name].widget.choices = position_choices
 
 
 class AttachmentForm(BootstrapFormMixin, forms.ModelForm):
@@ -78,28 +87,10 @@ class AttachmentForm(BootstrapFormMixin, forms.ModelForm):
 class ActionForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Action
-        fields = [
-            "action_text", "action_date", "status",
-            "from_name", "from_branch", "from_position",
-            "assigned_to", "to_branch", "to_position",
-        ]
-        labels = {
-            "assigned_to": "To — name",
-            "to_branch": "To — branch",
-            "to_position": "To — position",
-            "from_name": "From — name",
-            "from_branch": "From — branch",
-            "from_position": "From — position",
-        }
+        fields = ["action_text", "action_date", "status"]
         widgets = {
             "action_text": forms.Textarea(attrs={"rows": 2, "placeholder": "Directive or action taken"}),
             "action_date": forms.DateInput(attrs={"type": "date"}),
-            "from_name": forms.TextInput(),
-            "from_branch": forms.TextInput(),
-            "from_position": forms.TextInput(),
-            "assigned_to": forms.TextInput(),
-            "to_branch": forms.TextInput(),
-            "to_position": forms.TextInput(),
         }
 
 
