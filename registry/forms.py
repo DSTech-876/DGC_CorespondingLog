@@ -41,8 +41,12 @@ class CorrespondenceForm(BootstrapFormMixin, forms.ModelForm):
             "external_reference": "Lab / reference / invoice no.",
             "received_collected_by": "Received / collected by",
             "date_received_collected": "Date received / collected",
-            "sender": "From",
-            "recipient": "To",
+            "sender": "From — name",
+            "sender_branch": "From — branch",
+            "sender_position": "From — position",
+            "recipient": "To — name",
+            "recipient_branch": "To — branch",
+            "recipient_position": "To — position",
         }
         widgets = {
             "date_received_sent": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
@@ -51,7 +55,11 @@ class CorrespondenceForm(BootstrapFormMixin, forms.ModelForm):
             # Model TextFields that hold a single line render as oversized
             # textareas by default, so they are shown as plain inputs.
             "sender": forms.TextInput(),
+            "sender_branch": forms.TextInput(),
+            "sender_position": forms.TextInput(),
             "recipient": forms.TextInput(),
+            "recipient_branch": forms.TextInput(),
+            "recipient_position": forms.TextInput(),
             "copy_to_thru": forms.TextInput(),
             "external_reference": forms.TextInput(),
             "received_collected_by": forms.TextInput(),
@@ -70,10 +78,28 @@ class AttachmentForm(BootstrapFormMixin, forms.ModelForm):
 class ActionForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Action
-        fields = ["action_text", "action_date", "assigned_to"]
+        fields = [
+            "action_text", "action_date", "status",
+            "from_name", "from_branch", "from_position",
+            "assigned_to", "to_branch", "to_position",
+        ]
+        labels = {
+            "assigned_to": "To — name",
+            "to_branch": "To — branch",
+            "to_position": "To — position",
+            "from_name": "From — name",
+            "from_branch": "From — branch",
+            "from_position": "From — position",
+        }
         widgets = {
             "action_text": forms.Textarea(attrs={"rows": 2, "placeholder": "Directive or action taken"}),
             "action_date": forms.DateInput(attrs={"type": "date"}),
+            "from_name": forms.TextInput(),
+            "from_branch": forms.TextInput(),
+            "from_position": forms.TextInput(),
+            "assigned_to": forms.TextInput(),
+            "to_branch": forms.TextInput(),
+            "to_position": forms.TextInput(),
         }
 
 

@@ -52,7 +52,11 @@ class Correspondence(models.Model):
     date_received_sent = models.DateField(null=True, blank=True, db_index=True)
     date_of_document = models.DateField(null=True, blank=True)
     sender = models.TextField(blank=True)
+    sender_branch = models.CharField(max_length=255, blank=True)
+    sender_position = models.CharField(max_length=255, blank=True)
     recipient = models.TextField(blank=True)
+    recipient_branch = models.CharField(max_length=255, blank=True)
+    recipient_position = models.CharField(max_length=255, blank=True)
     copy_to_thru = models.TextField(blank=True)
     description = models.TextField(blank=True, db_index=True)
     external_reference = models.TextField(blank=True, help_text="Lab #, Ref #, Voucher #, Invoice #, etc.")
@@ -96,10 +100,21 @@ class Attachment(models.Model):
         super().save(*args, **kwargs)
 
 class Action(models.Model):
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        COMPLETED = "completed", "Completed"
+        CLOSED = "closed", "Closed"
+
     correspondence = models.ForeignKey(Correspondence, on_delete=models.CASCADE, related_name="actions")
     action_text = models.TextField()
     action_date = models.DateField(default=timezone.localdate)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+    from_name = models.CharField(max_length=255, blank=True)
+    from_branch = models.CharField(max_length=255, blank=True)
+    from_position = models.CharField(max_length=255, blank=True)
     assigned_to = models.CharField(max_length=255, blank=True)
+    to_branch = models.CharField(max_length=255, blank=True)
+    to_position = models.CharField(max_length=255, blank=True)
     entered_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
     class Meta:

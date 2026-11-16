@@ -18,6 +18,13 @@ Additional application fields:
 - direction: incoming/outgoing/other; historical import defaults to other until verified
 - original_row: source values retained as JSON for migration review
 - created_by / created_at / updated_at: application metadata
+- sender_branch / sender_position: branch and position of the "From" party (optional, added alongside `sender`)
+- recipient_branch / recipient_position: branch and position of the "To" party (optional, added alongside `recipient`)
+
+Actions & directives (the `Action` model) record who issued a directive and who it is assigned to, each with a name, branch and position:
+- from_name / from_branch / from_position: who issued the directive
+- assigned_to / to_branch / to_position: who it was assigned to
+- status: open / completed / closed — completed actions are shown with a verified checkmark icon, closed actions with a plain close icon. Existing actions can be edited (including status) by users with the `change_action` permission.
 
 The supplied workbook repeats the `FROM` and `TO` headings. The import maps the first pair to `sender`/`recipient`, falling back to the later pair only when the first is blank; the repeated columns are kept in `original_row` as `FROM (2)` and `TO (2)` until their meaning is confirmed.
 

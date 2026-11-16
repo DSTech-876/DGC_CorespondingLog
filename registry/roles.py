@@ -21,7 +21,7 @@ ROLE_GROUPS = {
         "Records officers",
         ["registry.view_correspondence", "registry.add_correspondence", "registry.change_correspondence",
          "registry.view_attachment", "registry.add_attachment",
-         "registry.view_action", "registry.add_action",
+         "registry.view_action", "registry.add_action", "registry.change_action",
          "registry.view_collectionrecord", "registry.add_collectionrecord",
          "registry.export_correspondence"],
     ),

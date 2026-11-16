@@ -16,7 +16,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from registry.importer import import_records, parse_rows, rows_from_stream
-from registry.models import AuditLog, Correspondence, UserProfile
+from registry.models import Action, AuditLog, Correspondence, UserProfile
 from registry.roles import apply_role
 
 
@@ -443,6 +443,81 @@ class RegistryPermissionTests(TestCase):
         self.client.force_login(self.viewer)
         response = self.client.get(reverse("dashboard"))
         self.assertNotContains(response, reverse("correspondence_create"))
+
+
+class ActionEditTests(TestCase):
+    """Actions carry a status and structured From/To details, and can be edited."""
+
+    def setUp(self):
+        self.officer = get_user_model().objects.create_user("officer2", password="pass12345!")
+        apply_role(self.officer, UserProfile.Role.OFFICER)
+        self.viewer = get_user_model().objects.create_user("viewer2", password="pass12345!")
+        apply_role(self.viewer, UserProfile.Role.VIEWER)
+        self.item = Correspondence.objects.create(sender="A", recipient="B")
+        self.action = Action.objects.create(
+            correspondence=self.item,
+            action_text="Follow up required",
+            from_name="Jane Doe",
+            from_branch="Records",
+            from_position="Supervisor",
+            assigned_to="John Smith",
+            to_branch="Chemistry",
+            to_position="Officer",
+        )
+
+    def test_new_action_defaults_to_open_status(self):
+        self.assertEqual(self.action.status, Action.Status.OPEN)
+
+    def test_officer_can_edit_an_existing_action(self):
+        self.client.force_login(self.officer)
+        response = self.client.post(
+            reverse("action_edit", args=[self.action.pk]),
+            {
+                "action_text": "Follow up completed",
+                "action_date": self.action.action_date,
+                "status": Action.Status.COMPLETED,
+                "from_name": "Jane Doe",
+                "from_branch": "Records",
+                "from_position": "Supervisor",
+                "assigned_to": "John Smith",
+                "to_branch": "Chemistry",
+                "to_position": "Officer",
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.action.refresh_from_db()
+        self.assertEqual(self.action.status, Action.Status.COMPLETED)
+        self.assertEqual(self.action.action_text, "Follow up completed")
+
+    def test_viewer_cannot_edit_an_action(self):
+        self.client.force_login(self.viewer)
+        response = self.client.get(reverse("action_edit", args=[self.action.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_completed_status_shows_verified_icon_on_detail_page(self):
+        self.action.status = Action.Status.COMPLETED
+        self.action.save()
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
+        self.assertContains(response, "bi-patch-check-fill")
+        self.assertNotContains(response, "bi-x-circle")
+
+    def test_closed_status_does_not_show_verified_icon(self):
+        self.action.status = Action.Status.CLOSED
+        self.action.save()
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
+        self.assertContains(response, "bi-x-circle")
+        self.assertNotContains(response, "bi-patch-check-fill")
+
+    def test_detail_page_shows_from_and_to_branch_and_position(self):
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
+        self.assertContains(response, "Jane Doe")
+        self.assertContains(response, "Records")
+        self.assertContains(response, "John Smith")
+        self.assertContains(response, "Chemistry")
 
 
 class RegisterImportTests(TestCase):

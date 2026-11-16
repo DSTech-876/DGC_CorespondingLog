@@ -11,6 +11,7 @@ class AttachmentInline(admin.TabularInline):
 class ActionInline(admin.TabularInline):
     model = Action
     extra = 0
+    fields = ("action_text", "action_date", "status", "from_name", "from_branch", "from_position", "assigned_to", "to_branch", "to_position")
 class CollectionInline(admin.TabularInline):
     model = CollectionRecord
     extra = 0

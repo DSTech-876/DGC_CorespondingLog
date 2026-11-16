@@ -10,7 +10,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q, Count
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
-from .models import Correspondence, AuditLog, Attachment
+from .models import Correspondence, AuditLog, Attachment, Action
 from .importer import (
     PREVIEW_LIMIT, ImportError_, flag_duplicates, import_records, parse_rows,
     rows_from_path, rows_from_stream,
@@ -98,6 +98,18 @@ def action_add(request, pk):
         obj = form.save(commit=False); obj.correspondence = item; obj.entered_by = request.user; obj.save()
         AuditLog.objects.create(user=request.user, correspondence=item, event="Action added", details=obj.action_text[:250])
     return redirect("correspondence_detail", pk=pk)
+
+@login_required
+@permission_required("registry.change_action", raise_exception=True)
+def action_edit(request, pk):
+    obj = get_object_or_404(Action, pk=pk)
+    form = ActionForm(request.POST or None, instance=obj)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        AuditLog.objects.create(user=request.user, correspondence=obj.correspondence, event="Action updated", details=f"{obj.get_status_display()}: {obj.action_text[:250]}")
+        messages.success(request, "Action updated.")
+        return redirect("correspondence_detail", pk=obj.correspondence_id)
+    return render(request, "registry/form.html", {"form": form, "title": "Edit action"})
 
 @login_required
 @permission_required("registry.add_collectionrecord", raise_exception=True)
