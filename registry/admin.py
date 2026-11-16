@@ -18,8 +18,8 @@ class CollectionInline(admin.TabularInline):
 
 @admin.register(Correspondence)
 class CorrespondenceAdmin(admin.ModelAdmin):
-    list_display = ("reference_id", "direction", "date_received_sent", "sender", "recipient", "description")
-    list_filter = ("direction", "date_received_sent")
+    list_display = ("reference_id", "direction", "origin", "date_received_sent", "sender", "recipient", "description")
+    list_filter = ("direction", "origin", "date_received_sent")
     search_fields = ("reference_id", "sender", "recipient", "description", "external_reference")
     inlines = [AttachmentInline, ActionInline, CollectionInline]
     readonly_fields = ("reference_id", "created_at", "updated_at")

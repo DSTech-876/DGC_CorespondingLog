@@ -69,7 +69,7 @@
           <th>From</th>
           <th>To</th>
           <th>Description</th>
-          <th>Reference</th>
+          <th>Status</th>
         </tr>
       </thead>
       <tbody>
@@ -85,7 +85,11 @@
             <td>{{ x.sender|truncatechars:35|default:"—" }}</td>
             <td>{{ x.recipient|truncatechars:35|default:"—" }}</td>
             <td class="muted">{{ x.description|truncatechars:65|default:"—" }}</td>
-            <td class="muted">{{ x.external_reference|truncatechars:30|default:"—" }}</td>
+            <td>
+              <span class="pill {% if x.current_status == 'Not Addressed' %}pill-danger{% elif x.current_status == 'Completed' %}pill-success{% elif x.current_status == 'Closed' %}pill-other{% else %}pill-info{% endif %}">
+                {{ x.current_status }}
+              </span>
+            </td>
           </tr>
         {% empty %}
           <tr>

@@ -41,6 +41,7 @@ class CorrespondenceForm(BootstrapFormMixin, forms.ModelForm):
             "external_reference": "Lab / reference / invoice no.",
             "received_collected_by": "Received / collected by",
             "date_received_collected": "Date received / collected",
+            "origin": "Origin",
             "sender": "From — name",
             "sender_branch": "From — branch",
             "sender_position": "From — position",

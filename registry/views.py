@@ -127,9 +127,9 @@ def export_csv(request):
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="correspondence-export.csv"'
     writer = csv.writer(response)
-    writer.writerow(["System ID", "Direction", "Date Received/Sent", "Date of Document", "From", "To", "Copy To/Thru", "Description", "Lab/Ref/Voucher/Invoice", "Supervisor Directives", "Received/Collected By", "Date Received/Collected", "Further Comments"])
+    writer.writerow(["System ID", "Direction", "Origin", "Date Received/Sent", "Date of Document", "From", "To", "Copy To/Thru", "Description", "Lab/Ref/Voucher/Invoice", "Supervisor Directives", "Received/Collected By", "Date Received/Collected", "Further Comments", "Status"])
     for x in Correspondence.objects.all():
-        writer.writerow([x.reference_id, x.get_direction_display(), x.date_received_sent, x.date_of_document, x.sender, x.recipient, x.copy_to_thru, x.description, x.external_reference, x.supervisor_directives, x.received_collected_by, x.date_received_collected, x.further_comments])
+        writer.writerow([x.reference_id, x.get_direction_display(), x.get_origin_display(), x.date_received_sent, x.date_of_document, x.sender, x.recipient, x.copy_to_thru, x.description, x.external_reference, x.supervisor_directives, x.received_collected_by, x.date_received_collected, x.further_comments, x.current_status])
     return response
 
 @login_required
