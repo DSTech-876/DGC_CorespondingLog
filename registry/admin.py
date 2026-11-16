@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 
-from .models import Correspondence, Attachment, Action, CollectionRecord, AuditLog, UserProfile
+from .models import Correspondence, Attachment, Action, CollectionRecord, AuditLog, UserProfile, Branch, Position
 from .roles import apply_role
 
 class AttachmentInline(admin.TabularInline):
@@ -11,7 +11,7 @@ class AttachmentInline(admin.TabularInline):
 class ActionInline(admin.TabularInline):
     model = Action
     extra = 0
-    fields = ("action_text", "action_date", "status", "from_name", "from_branch", "from_position", "assigned_to", "to_branch", "to_position")
+    fields = ("action_text", "action_date", "status")
 class CollectionInline(admin.TabularInline):
     model = CollectionRecord
     extra = 0
@@ -28,6 +28,18 @@ class CorrespondenceAdmin(admin.ModelAdmin):
 class AuditLogAdmin(admin.ModelAdmin):
     list_display = ("created_at", "user", "event", "correspondence")
     readonly_fields = ("user", "correspondence", "event", "details", "created_at")
+
+
+@admin.register(Branch)
+class BranchAdmin(admin.ModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name",)
+
+
+@admin.register(Position)
+class PositionAdmin(admin.ModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name",)
 
 
 class UserProfileInline(admin.StackedInline):

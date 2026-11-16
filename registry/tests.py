@@ -16,7 +16,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from registry.importer import import_records, parse_rows, rows_from_stream
-from registry.models import Action, AuditLog, Correspondence, UserProfile
+from registry.models import Action, AuditLog, Branch, Correspondence, Position, UserProfile
 from registry.roles import apply_role
 
 
@@ -446,7 +446,7 @@ class RegistryPermissionTests(TestCase):
 
 
 class ActionEditTests(TestCase):
-    """Actions carry a status and structured From/To details, and can be edited."""
+    """Actions carry a status and directive text, and can be edited."""
 
     def setUp(self):
         self.officer = get_user_model().objects.create_user("officer2", password="pass12345!")
@@ -457,12 +457,6 @@ class ActionEditTests(TestCase):
         self.action = Action.objects.create(
             correspondence=self.item,
             action_text="Follow up required",
-            from_name="Jane Doe",
-            from_branch="Records",
-            from_position="Supervisor",
-            assigned_to="John Smith",
-            to_branch="Chemistry",
-            to_position="Officer",
         )
 
     def test_new_action_defaults_to_open_status(self):
@@ -476,12 +470,6 @@ class ActionEditTests(TestCase):
                 "action_text": "Follow up completed",
                 "action_date": self.action.action_date,
                 "status": Action.Status.COMPLETED,
-                "from_name": "Jane Doe",
-                "from_branch": "Records",
-                "from_position": "Supervisor",
-                "assigned_to": "John Smith",
-                "to_branch": "Chemistry",
-                "to_position": "Officer",
             },
             follow=True,
         )
@@ -511,13 +499,46 @@ class ActionEditTests(TestCase):
         self.assertContains(response, "bi-x-circle")
         self.assertNotContains(response, "bi-patch-check-fill")
 
-    def test_detail_page_shows_from_and_to_branch_and_position(self):
+    def test_detail_page_does_not_offer_action_from_to_fields(self):
         self.client.force_login(self.officer)
         response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
-        self.assertContains(response, "Jane Doe")
-        self.assertContains(response, "Records")
-        self.assertContains(response, "John Smith")
-        self.assertContains(response, "Chemistry")
+        self.assertNotContains(response, 'name="from_name"')
+        self.assertNotContains(response, 'name="assigned_to"')
+
+
+class BranchPositionDropdownTests(TestCase):
+    """Admin-managed Branch/Position lists populate the From/To dropdowns."""
+
+    def setUp(self):
+        self.officer = get_user_model().objects.create_user("officer3", password="pass12345!")
+        apply_role(self.officer, UserProfile.Role.OFFICER)
+        Branch.objects.create(name="Chemistry")
+        Position.objects.create(name="Supervisor")
+
+    def test_correspondence_form_offers_branch_and_position_choices(self):
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_create"))
+        form = response.context["form"]
+        self.assertIn(("Chemistry", "Chemistry"), form.fields["sender_branch"].widget.choices)
+        self.assertIn(("Supervisor", "Supervisor"), form.fields["sender_position"].widget.choices)
+
+    def test_officer_can_submit_correspondence_with_dropdown_values(self):
+        self.client.force_login(self.officer)
+        response = self.client.post(
+            reverse("correspondence_create"),
+            {
+                "direction": Correspondence.Direction.OTHER,
+                "sender": "A",
+                "sender_branch": "Chemistry",
+                "sender_position": "Supervisor",
+                "recipient": "B",
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        item = Correspondence.objects.get(sender="A")
+        self.assertEqual(item.sender_branch, "Chemistry")
+        self.assertEqual(item.sender_position, "Supervisor")
 
 
 class RegisterImportTests(TestCase):
