@@ -423,6 +423,15 @@ class RegistryPermissionTests(TestCase):
         self.client.force_login(self.officer)
         self.assertEqual(self.client.get(reverse("correspondence_create")).status_code, 200)
 
+    def test_registration_form_offers_origin_dropdown(self):
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_create"))
+        form = response.context["form"]
+        self.assertEqual(
+            set(value for value, _ in form.fields["origin"].choices if value),
+            {"INTERNAL", "EXTERNAL", "OTHER"},
+        )
+
     def test_viewer_cannot_open_the_registration_form(self):
         self.client.force_login(self.viewer)
         self.assertEqual(self.client.get(reverse("correspondence_create")).status_code, 403)
@@ -505,6 +514,38 @@ class ActionEditTests(TestCase):
         self.assertNotContains(response, 'name="from_name"')
         self.assertNotContains(response, 'name="assigned_to"')
 
+    def test_pending_status_is_a_valid_action_choice(self):
+        self.action.status = Action.Status.PENDING
+        self.action.save()
+        self.action.refresh_from_db()
+        self.assertEqual(self.action.status, Action.Status.PENDING)
+
+
+class CorrespondenceCurrentStatusTests(TestCase):
+    """The register list shows a computed status instead of the reference column."""
+
+    def setUp(self):
+        self.officer = get_user_model().objects.create_user("officer4", password="pass12345!")
+        apply_role(self.officer, UserProfile.Role.OFFICER)
+
+    def test_correspondence_with_no_actions_is_not_addressed(self):
+        item = Correspondence.objects.create(sender="A", recipient="B")
+        self.assertEqual(item.current_status, "Not Addressed")
+
+    def test_correspondence_status_reflects_latest_action(self):
+        item = Correspondence.objects.create(sender="A", recipient="B")
+        Action.objects.create(correspondence=item, action_text="Reviewed", status=Action.Status.PENDING)
+        self.assertEqual(item.current_status, "Pending")
+
+    def test_list_page_shows_status_column_not_reference(self):
+        item = Correspondence.objects.create(sender="A", recipient="B", external_reference="VOUCHER-123")
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_list"))
+        self.assertContains(response, "Status")
+        self.assertNotContains(response, "<th>Reference</th>")
+        self.assertContains(response, "Not Addressed")
+        self.assertNotContains(response, "VOUCHER-123")
+
 
 class BranchPositionDropdownTests(TestCase):
     """Admin-managed Branch/Position lists populate the From/To dropdowns."""
@@ -528,6 +569,7 @@ class BranchPositionDropdownTests(TestCase):
             reverse("correspondence_create"),
             {
                 "direction": Correspondence.Direction.OTHER,
+                "origin": Correspondence.Origin.OTHER,
                 "sender": "A",
                 "sender_branch": "Chemistry",
                 "sender_position": "Supervisor",
@@ -596,6 +638,7 @@ class BranchPositionDropdownTests(TestCase):
             reverse("correspondence_edit", args=[item.pk]),
             {
                 "direction": Correspondence.Direction.OTHER,
+                "origin": Correspondence.Origin.OTHER,
                 "sender": "Old Sender",
                 "sender_branch": "Old Branch",
                 "sender_position": "Old Position",

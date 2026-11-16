@@ -47,8 +47,14 @@ class Correspondence(models.Model):
         OUTGOING = "OUT", "Outgoing"
         OTHER = "OTHER", "Other / Not specified"
 
+    class Origin(models.TextChoices):
+        INTERNAL = "INTERNAL", "Internal"
+        EXTERNAL = "EXTERNAL", "External"
+        OTHER = "OTHER", "Other"
+
     reference_id = models.CharField(max_length=30, unique=True, blank=True)
     direction = models.CharField(max_length=5, choices=Direction.choices, default=Direction.OTHER)
+    origin = models.CharField(max_length=10, choices=Origin.choices, default=Origin.OTHER)
     date_received_sent = models.DateField(null=True, blank=True, db_index=True)
     date_of_document = models.DateField(null=True, blank=True)
     sender = models.TextField(blank=True)
@@ -85,6 +91,15 @@ class Correspondence(models.Model):
 
     def __str__(self):
         return f"{self.reference_id or 'Unnumbered'} — {self.description[:70]}"
+
+    @property
+    def current_status(self):
+        """Overall status shown in the register: the latest action's status,
+        or "Not Addressed" when no action has been logged yet."""
+        latest_action = self.actions.first()  # Action.Meta orders by -action_date, -id
+        if latest_action is None:
+            return "Not Addressed"
+        return latest_action.get_status_display()
 
 class Branch(models.Model):
     """Admin-managed list of branches offered in the From/To branch dropdowns."""
@@ -126,6 +141,7 @@ class Attachment(models.Model):
 class Action(models.Model):
     class Status(models.TextChoices):
         OPEN = "open", "Open"
+        PENDING = "pending", "Pending"
         COMPLETED = "completed", "Completed"
         CLOSED = "closed", "Closed"
 
