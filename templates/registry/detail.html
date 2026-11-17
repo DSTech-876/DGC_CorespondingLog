@@ -34,7 +34,7 @@
     <div class="card p-4">
       <h2 class="h6 mb-3"><i class="bi bi-file-text me-1"></i> Register details</h2>
       <div class="detail-grid">
-        <div class="detail-item"><div class="detail-label">Origin</div><div class="detail-value">{{ item.get_origin_display }}</div></div>
+        <div class="detail-item"><div class="detail-label">Origin</div><div class="detail-value">{{ item.get_origin_display }}{% if item.origin == "EXTERNAL" and item.origin_external_name %} — {{ item.origin_external_name }}{% endif %}</div></div>
         <div class="detail-item"><div class="detail-label">Date received / sent</div><div class="detail-value">{{ item.date_received_sent|default:"—" }}</div></div>
         <div class="detail-item"><div class="detail-label">Date of document</div><div class="detail-value">{{ item.date_of_document|default:"—" }}</div></div>
         <div class="detail-item"><div class="detail-label">From</div><div class="detail-value">{{ item.sender|default:"—" }}{% if item.sender_branch or item.sender_position %}<div class="muted small">{{ item.sender_branch }}{% if item.sender_branch and item.sender_position %} · {% endif %}{{ item.sender_position }}</div>{% endif %}</div></div>
