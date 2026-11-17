@@ -56,6 +56,11 @@ class Correspondence(models.Model):
     reference_id = models.CharField(max_length=30, unique=True, blank=True)
     direction = models.CharField(max_length=5, choices=Direction.choices, default=Direction.OTHER)
     origin = models.CharField(max_length=10, choices=Origin.choices, default=Origin.OTHER)
+    origin_external_name = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Name of the external person/organisation, when origin is External.",
+    )
     date_received_sent = models.DateField(null=True, blank=True, db_index=True)
     date_of_document = models.DateField(null=True, blank=True)
     sender = models.TextField(blank=True)
@@ -113,6 +118,19 @@ class Correspondence(models.Model):
         if latest_action is None:
             return "Not Addressed"
         return latest_action.get_status_display()
+
+    @property
+    def latest_action_text(self):
+        """Text of the most recent action/directive, for the register column.
+
+        Uses prefetched_latest_action if available (via prefetch_related_objects),
+        otherwise queries the database."""
+        if hasattr(self, 'prefetched_latest_action'):
+            actions = self.prefetched_latest_action
+            latest_action = actions[0] if actions else None
+        else:
+            latest_action = self.actions.first()
+        return latest_action.action_text if latest_action else ""
 
 class Branch(models.Model):
     """Admin-managed list of branches offered in the From/To branch dropdowns."""

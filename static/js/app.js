@@ -61,5 +61,19 @@
         }
       });
     });
+
+    // Correspondence form: the "external origin name" field only makes
+    // sense when Origin is set to External, so hide it otherwise.
+    var originSelect = document.querySelector("[data-origin-select]");
+    var originNameInput = document.querySelector("[data-origin-external-name]");
+    if (originSelect && originNameInput) {
+      var originNameWrapper = originNameInput.closest(".col-12, [class*='col-']") || originNameInput.parentElement;
+      var syncOriginName = function () {
+        var isExternal = originSelect.value === "EXTERNAL";
+        originNameWrapper.style.display = isExternal ? "" : "none";
+      };
+      originSelect.addEventListener("change", syncOriginName);
+      syncOriginName();
+    }
   });
 })();

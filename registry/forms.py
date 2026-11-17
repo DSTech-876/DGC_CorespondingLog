@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django import forms
+from django.utils import timezone
 
 from .importer import SUPPORTED_SUFFIXES
 from .models import Correspondence, Attachment, Action, CollectionRecord, Branch, Position
@@ -34,7 +35,10 @@ class BootstrapFormMixin:
 class CorrespondenceForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Correspondence
-        exclude = ["reference_id", "original_row", "created_by", "created_at", "updated_at"]
+        exclude = [
+            "reference_id", "original_row", "created_by", "created_at", "updated_at",
+            "supervisor_directives",
+        ]
         labels = {
             "date_received_sent": "Date received / sent",
             "copy_to_thru": "Copy to / thru",
@@ -42,6 +46,7 @@ class CorrespondenceForm(BootstrapFormMixin, forms.ModelForm):
             "received_collected_by": "Received / collected by",
             "date_received_collected": "Date received / collected",
             "origin": "Origin",
+            "origin_external_name": "External origin — name",
             "sender": "From — name",
             "sender_branch": "From — branch",
             "sender_position": "From — position",
@@ -55,6 +60,7 @@ class CorrespondenceForm(BootstrapFormMixin, forms.ModelForm):
             "date_received_collected": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             # Model TextFields that hold a single line render as oversized
             # textareas by default, so they are shown as plain inputs.
+            "origin": forms.Select(attrs={"data-origin-select": "1"}),
             "sender": forms.TextInput(),
             "sender_branch": forms.Select(),
             "sender_position": forms.Select(),
@@ -65,8 +71,13 @@ class CorrespondenceForm(BootstrapFormMixin, forms.ModelForm):
             "external_reference": forms.TextInput(),
             "received_collected_by": forms.TextInput(),
             "description": forms.Textarea(attrs={"rows": 3}),
-            "supervisor_directives": forms.Textarea(attrs={"rows": 3}),
             "further_comments": forms.Textarea(attrs={"rows": 3}),
+            "origin_external_name": forms.TextInput(
+                attrs={
+                    "placeholder": "Name of the external person/organisation",
+                    "data-origin-external-name": "1",
+                }
+            ),
         }
 
     def __init__(self, *args, **kwargs):
@@ -119,6 +130,24 @@ class ActionForm(BootstrapFormMixin, forms.ModelForm):
             "action_date": forms.DateInput(attrs={"type": "date"}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # None of these are mandatory: an entry can be logged with partial
+        # information and filled in later.
+        for field_name in ("action_text", "action_date", "status"):
+            self.fields[field_name].required = False
+        self.fields["status"].choices = [("", "---------")] + list(Action.Status.choices)
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if not instance.action_date:
+            instance.action_date = timezone.localdate()
+        if not instance.status:
+            instance.status = Action.Status.OPEN
+        if commit:
+            instance.save()
+        return instance
+
 
 class CollectionRecordForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
@@ -128,6 +157,22 @@ class CollectionRecordForm(BootstrapFormMixin, forms.ModelForm):
             "collection_date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 2}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # None of these are mandatory: an entry can be logged with partial
+        # information and filled in later.
+        for field_name in ("collected_by", "collection_date"):
+            self.fields[field_name].required = False
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if not instance.collection_date:
+            instance.collection_date = timezone.localdate()
+        if commit:
+            instance.save()
+        return instance
+
 
 
 class RegisterImportForm(BootstrapFormMixin, forms.Form):

@@ -69,6 +69,7 @@
           <th>From</th>
           <th>To</th>
           <th>Description</th>
+          <th>Actions &amp; directives</th>
           <th>Status</th>
         </tr>
       </thead>
@@ -85,6 +86,7 @@
             <td>{{ x.sender|truncatechars:35|default:"—" }}</td>
             <td>{{ x.recipient|truncatechars:35|default:"—" }}</td>
             <td class="muted">{{ x.description|truncatechars:65|default:"—" }}</td>
+            <td class="muted">{{ x.latest_action_text|truncatechars:65|default:"—" }}</td>
             <td>
               <span class="pill {% if x.current_status == 'Not Addressed' %}pill-danger{% elif x.current_status == 'Completed' %}pill-success{% elif x.current_status == 'Closed' %}pill-other{% else %}pill-info{% endif %}">
                 {{ x.current_status }}
@@ -93,7 +95,7 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="7">
+            <td colspan="8">
               <div class="empty-state"><i class="bi bi-search"></i> No matching records.</div>
             </td>
           </tr>
