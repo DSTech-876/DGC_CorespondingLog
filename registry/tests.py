@@ -547,6 +547,154 @@ class CorrespondenceCurrentStatusTests(TestCase):
         self.assertNotContains(response, "VOUCHER-123")
 
 
+
+
+class ActionFormOptionalFieldsTests(TestCase):
+    """Action form fields are optional only when adding, not when editing."""
+
+    def setUp(self):
+        # Use same password syntax as other tests
+        self.officer = get_user_model().objects.create_user("officer5", password="pass12345!")
+        apply_role(self.officer, UserProfile.Role.OFFICER)
+        self.item = Correspondence.objects.create(sender="A", recipient="B")
+
+    def test_blank_action_submission_uses_defaults(self):
+        """Submitting a blank action should create record with today's date and Open status."""
+        self.client.force_login(self.officer)
+        response = self.client.post(
+            reverse("action_add", args=[self.item.pk]),
+            {
+                "action_text": "",
+                "action_date": "",
+                "status": "",
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        action = Action.objects.get(correspondence=self.item)
+        self.assertEqual(action.action_text, "")
+        self.assertEqual(action.action_date, date.today())
+        self.assertEqual(action.status, Action.Status.OPEN)
+
+    def test_blank_collection_submission_uses_defaults(self):
+        """Submitting a blank collection should create record with today's date."""
+        from registry.models import CollectionRecord
+        self.client.force_login(self.officer)
+        response = self.client.post(
+            reverse("collection_add", args=[self.item.pk]),
+            {
+                "collected_by": "",
+                "collection_date": "",
+                "notes": "",
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        collection = CollectionRecord.objects.get(correspondence=self.item)
+        self.assertEqual(collection.collected_by, "")
+        self.assertEqual(collection.collection_date, date.today())
+        self.assertEqual(collection.notes, "")
+
+    def test_editing_action_requires_date_and_status(self):
+        """Editing an action should require date and status to prevent accidental clearing."""
+        self.client.force_login(self.officer)
+        action = Action.objects.create(
+            correspondence=self.item,
+            action_text="Original text",
+            action_date=date(2026, 11, 10),
+            status=Action.Status.PENDING,
+        )
+        # Try to submit without date and status
+        response = self.client.post(
+            reverse("action_edit", args=[action.pk]),
+            {
+                "action_text": "Updated text",
+                "action_date": "",
+                "status": "",
+            },
+        )
+        # Form should fail validation and return to form page
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(response.context["form"], "action_date", "This field is required.")
+        self.assertFormError(response.context["form"], "status", "This field is required.")
+        # Original values should be unchanged
+        action.refresh_from_db()
+        self.assertEqual(action.action_date, date(2026, 11, 10))
+        self.assertEqual(action.status, Action.Status.PENDING)
+
+    def test_editing_action_with_valid_data_succeeds(self):
+        """Editing an action with valid data should update successfully."""
+        self.client.force_login(self.officer)
+        action = Action.objects.create(
+            correspondence=self.item,
+            action_text="Original text",
+            action_date=date(2026, 11, 10),
+            status=Action.Status.PENDING,
+        )
+        response = self.client.post(
+            reverse("action_edit", args=[action.pk]),
+            {
+                "action_text": "Updated text",
+                "action_date": str(date(2026, 11, 15)),
+                "status": Action.Status.COMPLETED,
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        action.refresh_from_db()
+        self.assertEqual(action.action_text, "Updated text")
+        self.assertEqual(action.action_date, date(2026, 11, 15))
+        self.assertEqual(action.status, Action.Status.COMPLETED)
+
+
+class LatestActionTextRenderingTests(TestCase):
+    """The latest action text is correctly rendered in the correspondence list."""
+
+    def setUp(self):
+        self.officer = get_user_model().objects.create_user("officer6", password="pass12345!")
+        apply_role(self.officer, UserProfile.Role.OFFICER)
+
+    def test_list_shows_latest_action_text_with_multiple_actions(self):
+        """List page should show the most recent action's text, not an older one."""
+        item = Correspondence.objects.create(sender="A", recipient="B")
+        # Create older action
+        Action.objects.create(
+            correspondence=item,
+            action_text="First action text",
+            action_date=date(2026, 11, 1),
+        )
+        # Create newer action
+        Action.objects.create(
+            correspondence=item,
+            action_text="Latest action text",
+            action_date=date(2026, 11, 15),
+        )
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_list"))
+        self.assertContains(response, "Latest action text")
+        self.assertNotContains(response, "First action text")
+
+    def test_latest_action_text_property_returns_newest_action(self):
+        """Model property should return the text of the newest action."""
+        item = Correspondence.objects.create(sender="A", recipient="B")
+        Action.objects.create(
+            correspondence=item,
+            action_text="Older action",
+            action_date=date(2026, 11, 1),
+        )
+        Action.objects.create(
+            correspondence=item,
+            action_text="Newest action",
+            action_date=date(2026, 11, 15),
+        )
+        self.assertEqual(item.latest_action_text, "Newest action")
+
+    def test_latest_action_text_empty_when_no_actions(self):
+        """Latest action text should be empty string when no actions exist."""
+        item = Correspondence.objects.create(sender="A", recipient="B")
+        self.assertEqual(item.latest_action_text, "")
+
+
 class BranchPositionDropdownTests(TestCase):
     """Admin-managed Branch/Position lists populate the From/To dropdowns."""
 

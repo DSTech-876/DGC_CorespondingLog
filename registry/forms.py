@@ -132,10 +132,13 @@ class ActionForm(BootstrapFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # None of these are mandatory: an entry can be logged with partial
-        # information and filled in later.
-        for field_name in ("action_text", "action_date", "status"):
-            self.fields[field_name].required = False
+        # When adding new actions, fields can be optional with defaults applied.
+        # When editing existing actions, preserve required-field behavior so users
+        # cannot accidentally clear dates/status and have them silently replaced.
+        is_adding = self.instance.pk is None
+        if is_adding:
+            for field_name in ("action_text", "action_date", "status"):
+                self.fields[field_name].required = False
         self.fields["status"].choices = [("", "---------")] + list(Action.Status.choices)
 
     def save(self, commit=True):
