@@ -10,6 +10,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q, Count
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from .models import Correspondence, AuditLog, Attachment, Action, Notification, get_prefetch_latest_action, notify_users
 from .importer import (
     PREVIEW_LIMIT, ImportError_, flag_duplicates, import_records, parse_rows,
@@ -87,6 +88,9 @@ def correspondence_delete(request, pk):
     item = get_object_or_404(Correspondence, pk=pk)
     if request.method == "POST":
         reference_id = item.reference_id
+        # Delete attachment files from storage before deleting the correspondence
+        for attachment in item.attachments.all():
+            attachment.file.delete(save=False)
         AuditLog.objects.create(
             user=request.user, correspondence=item, event="Deleted",
             details=f"Correspondence {reference_id} deleted",
@@ -318,7 +322,9 @@ def notification_mark_read(request, pk):
         notification.is_read = True
         notification.save(update_fields=["is_read"])
     next_url = request.POST.get("next") or request.GET.get("next")
-    return redirect(next_url or "notification_list")
+    if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        return redirect(next_url)
+    return redirect("notification_list")
 
 
 @login_required
@@ -326,4 +332,6 @@ def notification_mark_all_read(request):
     if request.method == "POST":
         request.user.notifications.filter(is_read=False).update(is_read=True)
     next_url = request.POST.get("next")
-    return redirect(next_url or "notification_list")
+    if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        return redirect(next_url)
+    return redirect("notification_list")
