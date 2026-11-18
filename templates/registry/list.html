@@ -23,7 +23,7 @@
     <div class="col-lg-3">
       <label class="form-label" for="filter-q">Search</label>
       <input class="form-control" id="filter-q" name="q" value="{{ q }}"
-             placeholder="ID, sender, recipient, description or reference">
+             placeholder="ID, from/to, description or reference">
     </div>
     <div class="col-lg-3">
       <label class="form-label" for="filter-direction">Direction</label>
@@ -68,6 +68,8 @@
           <th>Date received/sent</th>
           <th>From</th>
           <th>To</th>
+          <th>From (Delivery)</th>
+          <th>To (Delivery)</th>
           <th>Description</th>
           <th>Actions &amp; directives</th>
           <th>Status</th>
@@ -83,6 +85,8 @@
               </span>
             </td>
             <td>{{ x.date_received_sent|default:"—" }}</td>
+            <td>{{ x.from_addressee|truncatechars:35|default:"—" }}</td>
+            <td>{{ x.to_addressee|truncatechars:35|default:"—" }}</td>
             <td>{{ x.sender|truncatechars:35|default:"—" }}</td>
             <td>{{ x.recipient|truncatechars:35|default:"—" }}</td>
             <td class="muted">{{ x.description|truncatechars:65|default:"—" }}</td>
@@ -95,7 +99,7 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="8">
+            <td colspan="10">
               <div class="empty-state"><i class="bi bi-search"></i> No matching records.</div>
             </td>
           </tr>

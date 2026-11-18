@@ -69,6 +69,14 @@ class Correspondence(models.Model):
     recipient = models.TextField(blank=True)
     recipient_branch = models.CharField(max_length=255, blank=True)
     recipient_position = models.CharField(max_length=255, blank=True)
+    from_addressee = models.TextField(
+        blank=True,
+        help_text="From — as stated on the letter/document itself, separate from the delivery sender above.",
+    )
+    to_addressee = models.TextField(
+        blank=True,
+        help_text="To — as stated on the letter/document itself, separate from the delivery recipient above.",
+    )
     copy_to_thru = models.TextField(blank=True)
     description = models.TextField(blank=True, db_index=True)
     external_reference = models.TextField(blank=True, help_text="Lab #, Ref #, Voucher #, Invoice #, etc.")
