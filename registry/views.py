@@ -10,7 +10,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q, Count
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
-from .models import Correspondence, AuditLog, Attachment, Action, get_prefetch_latest_action
+from .models import Correspondence, AuditLog, Attachment, Action, Notification, get_prefetch_latest_action, notify_users
 from .importer import (
     PREVIEW_LIMIT, ImportError_, flag_duplicates, import_records, parse_rows,
     rows_from_path, rows_from_stream,
@@ -63,6 +63,7 @@ def correspondence_create(request):
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False); item.created_by = request.user; item.save()
         AuditLog.objects.create(user=request.user, correspondence=item, event="Created", details="Correspondence registered")
+        notify_users(f"{item.reference_id} was registered by {request.user.get_username()}.", correspondence=item, actor=request.user)
         messages.success(request, "Correspondence registered.")
         return redirect("correspondence_detail", pk=item.pk)
     return render(request, "registry/form.html", {"form": form, "title": "Register correspondence"})
@@ -75,9 +76,26 @@ def correspondence_edit(request, pk):
     if request.method == "POST" and form.is_valid():
         form.save()
         AuditLog.objects.create(user=request.user, correspondence=item, event="Updated", details="Correspondence record updated")
+        notify_users(f"{item.reference_id} was updated by {request.user.get_username()}.", correspondence=item, actor=request.user)
         messages.success(request, "Record updated.")
         return redirect("correspondence_detail", pk=item.pk)
     return render(request, "registry/form.html", {"form": form, "title": "Edit correspondence"})
+
+@login_required
+@permission_required("registry.delete_correspondence", raise_exception=True)
+def correspondence_delete(request, pk):
+    item = get_object_or_404(Correspondence, pk=pk)
+    if request.method == "POST":
+        reference_id = item.reference_id
+        AuditLog.objects.create(
+            user=request.user, correspondence=item, event="Deleted",
+            details=f"Correspondence {reference_id} deleted",
+        )
+        notify_users(f"{reference_id} was deleted from the register by {request.user.get_username()}.", actor=request.user)
+        item.delete()
+        messages.success(request, f"{reference_id} has been deleted.")
+        return redirect("correspondence_list")
+    return render(request, "registry/confirm_delete.html", {"item": item})
 
 @login_required
 @permission_required("registry.add_attachment", raise_exception=True)
@@ -87,6 +105,7 @@ def attachment_upload(request, pk):
     if request.method == "POST" and form.is_valid():
         obj = form.save(commit=False); obj.correspondence = item; obj.uploaded_by = request.user; obj.save()
         AuditLog.objects.create(user=request.user, correspondence=item, event="Attachment uploaded", details=obj.original_filename)
+        notify_users(f"A new attachment was added to {item.reference_id} by {request.user.get_username()}.", correspondence=item, actor=request.user)
         messages.success(request, "Attachment uploaded.")
     return redirect("correspondence_detail", pk=pk)
 
@@ -98,6 +117,7 @@ def action_add(request, pk):
     if request.method == "POST" and form.is_valid():
         obj = form.save(commit=False); obj.correspondence = item; obj.entered_by = request.user; obj.save()
         AuditLog.objects.create(user=request.user, correspondence=item, event="Action added", details=obj.action_text[:250])
+        notify_users(f"A new action was added to {item.reference_id} by {request.user.get_username()}.", correspondence=item, actor=request.user)
     return redirect("correspondence_detail", pk=pk)
 
 @login_required
@@ -108,6 +128,7 @@ def action_edit(request, pk):
     if request.method == "POST" and form.is_valid():
         form.save()
         AuditLog.objects.create(user=request.user, correspondence=obj.correspondence, event="Action updated", details=f"{obj.get_status_display()}: {obj.action_text[:250]}")
+        notify_users(f"An action on {obj.correspondence.reference_id} was updated by {request.user.get_username()}.", correspondence=obj.correspondence, actor=request.user)
         messages.success(request, "Action updated.")
         return redirect("correspondence_detail", pk=obj.correspondence_id)
     return render(request, "registry/form_action.html", {"form": form, "title": "Edit action", "correspondence": obj.correspondence})
@@ -120,6 +141,7 @@ def collection_add(request, pk):
     if request.method == "POST" and form.is_valid():
         obj = form.save(commit=False); obj.correspondence = item; obj.recorded_by = request.user; obj.save()
         AuditLog.objects.create(user=request.user, correspondence=item, event="Collection recorded", details=f"{obj.collected_by} — {obj.collection_date}")
+        notify_users(f"A collection was recorded for {item.reference_id} by {request.user.get_username()}.", correspondence=item, actor=request.user)
     return redirect("correspondence_detail", pk=pk)
 
 @login_required
@@ -278,3 +300,30 @@ def register_import_confirm(request):
         f"Skipped {result.skipped} duplicate(s).",
     )
     return redirect("correspondence_list")
+
+
+# --------------------------------------------------------------- notifications
+
+@login_required
+def notification_list(request):
+    qs = request.user.notifications.all()
+    page = Paginator(qs, 25).get_page(request.GET.get("page"))
+    return render(request, "registry/notifications.html", {"page": page})
+
+
+@login_required
+def notification_mark_read(request, pk):
+    notification = get_object_or_404(request.user.notifications, pk=pk)
+    if request.method == "POST" and not notification.is_read:
+        notification.is_read = True
+        notification.save(update_fields=["is_read"])
+    next_url = request.POST.get("next") or request.GET.get("next")
+    return redirect(next_url or "notification_list")
+
+
+@login_required
+def notification_mark_all_read(request):
+    if request.method == "POST":
+        request.user.notifications.filter(is_read=False).update(is_read=True)
+    next_url = request.POST.get("next")
+    return redirect(next_url or "notification_list")

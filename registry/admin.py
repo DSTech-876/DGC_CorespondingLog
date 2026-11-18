@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 
-from .models import Correspondence, Attachment, Action, CollectionRecord, AuditLog, UserProfile, Branch, Position
+from .models import Correspondence, Attachment, Action, CollectionRecord, AuditLog, Notification, UserProfile, Branch, Position
 from .roles import apply_role
 
 class AttachmentInline(admin.TabularInline):
@@ -28,6 +28,13 @@ class CorrespondenceAdmin(admin.ModelAdmin):
 class AuditLogAdmin(admin.ModelAdmin):
     list_display = ("created_at", "user", "event", "correspondence")
     readonly_fields = ("user", "correspondence", "event", "details", "created_at")
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "recipient", "message", "is_read", "correspondence")
+    list_filter = ("is_read",)
+    readonly_fields = ("recipient", "correspondence", "message", "created_at")
 
 
 @admin.register(Branch)

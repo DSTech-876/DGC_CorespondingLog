@@ -16,7 +16,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from registry.importer import import_records, parse_rows, rows_from_stream
-from registry.models import Action, AuditLog, Branch, Correspondence, Position, UserProfile
+from registry.models import Action, AuditLog, Branch, Correspondence, Notification, Position, UserProfile
 from registry.roles import apply_role
 
 
@@ -952,3 +952,96 @@ class RegisterImportTests(TestCase):
         self.assertIn("Imported: 1", out.getvalue())
         item = Correspondence.objects.get()
         self.assertEqual(item.date_received_sent, date(2021, 4, 8))
+
+
+class CorrespondenceDeleteTests(TestCase):
+    """Only admins can delete correspondence; deletion is audited and notified."""
+
+    def setUp(self):
+        self.admin = get_user_model().objects.create_user("deladmin", password="pass12345!")
+        apply_role(self.admin, UserProfile.Role.ADMIN)
+        self.officer = get_user_model().objects.create_user("delofficer", password="pass12345!")
+        apply_role(self.officer, UserProfile.Role.OFFICER)
+        self.item = Correspondence.objects.create(sender="A", recipient="B", description="Needs removal")
+
+    def test_officer_cannot_delete(self):
+        self.client.force_login(self.officer)
+        response = self.client.post(reverse("correspondence_delete", args=[self.item.pk]))
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Correspondence.objects.filter(pk=self.item.pk).exists())
+
+    def test_officer_is_not_offered_delete_button(self):
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
+        self.assertNotContains(response, reverse("correspondence_delete", args=[self.item.pk]))
+
+    def test_admin_sees_delete_button(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
+        self.assertContains(response, reverse("correspondence_delete", args=[self.item.pk]))
+
+    def test_admin_can_delete_and_it_is_audited(self):
+        reference_id = self.item.reference_id
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("correspondence_delete", args=[self.item.pk]))
+        self.assertRedirects(response, reverse("correspondence_list"))
+        self.assertFalse(Correspondence.objects.filter(pk=self.item.pk).exists())
+        log = AuditLog.objects.get(event="Deleted")
+        self.assertEqual(log.user, self.admin)
+        self.assertIn(reference_id, log.details)
+
+    def test_deleting_notifies_other_active_users_but_not_the_actor(self):
+        self.client.force_login(self.admin)
+        self.client.post(reverse("correspondence_delete", args=[self.item.pk]))
+        self.assertTrue(Notification.objects.filter(recipient=self.officer).exists())
+        self.assertFalse(Notification.objects.filter(recipient=self.admin).exists())
+
+    def test_get_request_shows_confirmation_page_without_deleting(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("correspondence_delete", args=[self.item.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Correspondence.objects.filter(pk=self.item.pk).exists())
+
+
+class NotificationTests(TestCase):
+    """Users are notified in-app when correspondence changes."""
+
+    def setUp(self):
+        self.actor = get_user_model().objects.create_user("notactor", password="pass12345!")
+        apply_role(self.actor, UserProfile.Role.OFFICER)
+        self.other = get_user_model().objects.create_user("notother", password="pass12345!")
+        apply_role(self.other, UserProfile.Role.VIEWER)
+
+    def test_creating_a_record_notifies_other_users(self):
+        self.client.force_login(self.actor)
+        self.client.post(reverse("correspondence_create"), {
+            "direction": "IN", "origin": "OTHER", "sender": "A", "recipient": "B",
+        })
+        item = Correspondence.objects.get()
+        notification = Notification.objects.get(recipient=self.other)
+        self.assertIn(item.reference_id, notification.message)
+        self.assertEqual(notification.correspondence_id, item.pk)
+        self.assertFalse(Notification.objects.filter(recipient=self.actor).exists())
+
+    def test_editing_a_record_notifies_other_users(self):
+        item = Correspondence.objects.create(sender="A", recipient="B")
+        self.client.force_login(self.actor)
+        self.client.post(reverse("correspondence_edit", args=[item.pk]), {
+            "direction": "IN", "origin": "OTHER", "sender": "A", "recipient": "C",
+        })
+        self.assertTrue(Notification.objects.filter(recipient=self.other, correspondence=item).exists())
+
+    def test_notification_list_only_shows_own_notifications(self):
+        Notification.objects.create(recipient=self.other, message="For other")
+        Notification.objects.create(recipient=self.actor, message="For actor")
+        self.client.force_login(self.actor)
+        response = self.client.get(reverse("notification_list"))
+        self.assertContains(response, "For actor")
+        self.assertNotContains(response, "For other")
+
+    def test_mark_all_read_clears_unread_count(self):
+        Notification.objects.create(recipient=self.actor, message="One")
+        Notification.objects.create(recipient=self.actor, message="Two")
+        self.client.force_login(self.actor)
+        self.client.post(reverse("notification_mark_all_read"))
+        self.assertEqual(Notification.objects.filter(recipient=self.actor, is_read=False).count(), 0)
