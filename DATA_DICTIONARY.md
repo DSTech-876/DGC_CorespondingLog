@@ -19,8 +19,9 @@ Additional application fields:
 - origin: internal/external/other; chosen on the registration form to record where the correspondence originated from
 - original_row: source values retained as JSON for migration review
 - created_by / created_at / updated_at: application metadata
-- sender_branch / sender_position: branch and position of the "From" party, chosen from admin-managed `Branch`/`Position` lists (optional, added alongside `sender`)
-- recipient_branch / recipient_position: branch and position of the "To" party, chosen from admin-managed `Branch`/`Position` lists (optional, added alongside `recipient`)
+- sender_branch / sender_position: branch and position of the "From (Delivery)" party, chosen from admin-managed `Branch`/`Position` lists (optional, added alongside `sender`)
+- recipient_branch / recipient_position: branch and position of the "To (Delivery)" party, chosen from admin-managed `Branch`/`Position` lists (optional, added alongside `recipient`)
+- from_addressee / to_addressee: the From/To named on the letter/document itself (e.g. the official addressee), kept separate from `sender`/`recipient` which record who physically delivered/received it ("From (Delivery)" / "To (Delivery)" on the form)
 - current_status: computed, not stored — the status of the latest logged action, or "Not Addressed" when no action has been recorded yet; shown in place of the reference column on the register list
 
 Branch and Position are simple admin-managed lookup lists (name only) that populate the From/To branch and position dropdowns on the Correspondence form; administrators add or edit entries from the Django admin.

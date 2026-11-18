@@ -40,7 +40,8 @@ def correspondence_list(request):
     if q:
         qs = qs.filter(
             Q(reference_id__icontains=q) | Q(sender__icontains=q) |
-            Q(recipient__icontains=q) | Q(copy_to_thru__icontains=q) |
+            Q(recipient__icontains=q) | Q(from_addressee__icontains=q) |
+            Q(to_addressee__icontains=q) | Q(copy_to_thru__icontains=q) |
             Q(description__icontains=q) | Q(external_reference__icontains=q) |
             Q(supervisor_directives__icontains=q) | Q(received_collected_by__icontains=q)
         )
@@ -154,9 +155,9 @@ def export_csv(request):
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="correspondence-export.csv"'
     writer = csv.writer(response)
-    writer.writerow(["System ID", "Direction", "Origin", "Date Received/Sent", "Date of Document", "From", "To", "Copy To/Thru", "Description", "Lab/Ref/Voucher/Invoice", "Supervisor Directives", "Received/Collected By", "Date Received/Collected", "Further Comments", "Status"])
+    writer.writerow(["System ID", "Direction", "Origin", "Date Received/Sent", "Date of Document", "From (Delivery)", "To (Delivery)", "From", "To", "Copy To/Thru", "Description", "Lab/Ref/Voucher/Invoice", "Supervisor Directives", "Received/Collected By", "Date Received/Collected", "Further Comments", "Status"])
     for x in Correspondence.objects.prefetch_related(get_prefetch_latest_action()):
-        writer.writerow([x.reference_id, x.get_direction_display(), x.get_origin_display(), x.date_received_sent, x.date_of_document, x.sender, x.recipient, x.copy_to_thru, x.description, x.external_reference, x.supervisor_directives, x.received_collected_by, x.date_received_collected, x.further_comments, x.current_status])
+        writer.writerow([x.reference_id, x.get_direction_display(), x.get_origin_display(), x.date_received_sent, x.date_of_document, x.sender, x.recipient, x.from_addressee, x.to_addressee, x.copy_to_thru, x.description, x.external_reference, x.supervisor_directives, x.received_collected_by, x.date_received_collected, x.further_comments, x.current_status])
     return response
 
 @login_required
