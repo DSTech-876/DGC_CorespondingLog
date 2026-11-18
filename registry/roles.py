@@ -27,7 +27,8 @@ ROLE_GROUPS = {
     ),
     Role.ADMIN: (
         "Registry administrators",
-        ["registry.export_correspondence", "registry.view_sensitive_correspondence"],
+        ["registry.export_correspondence", "registry.view_sensitive_correspondence",
+         "registry.delete_correspondence"],
     ),
 }
 

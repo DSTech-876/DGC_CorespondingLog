@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Notifications</h1>
+    <p class="subtitle">Changes to correspondence you may need to know about.</p>
+  </div>
+  {% if page.object_list %}
+    <form method="post" action="{% url 'notification_mark_all_read' %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{% url 'notification_list' %}">
+      <button class="btn btn-outline-secondary"><i class="bi bi-check2-all me-1"></i> Mark all as read</button>
+    </form>
+  {% endif %}
+</div>
+
+<div class="card">
+  {% for n in page %}
+    <div class="d-flex align-items-start gap-2 border-bottom p-3 {% if not n.is_read %}bg-body-secondary{% endif %}">
+      <div class="flex-grow-1">
+        <div>
+          {% if n.correspondence_id %}
+            <a class="text-decoration-none" href="{% url 'correspondence_detail' n.correspondence_id %}">{{ n.message }}</a>
+          {% else %}
+            {{ n.message }}
+          {% endif %}
+        </div>
+        <div class="muted small">{{ n.created_at|date:"Y-m-d H:i" }}</div>
+      </div>
+      {% if not n.is_read %}
+        <form method="post" action="{% url 'notification_mark_read' n.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'notification_list' %}">
+          <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-check2"></i></button>
+        </form>
+      {% endif %}
+    </div>
+  {% empty %}
+    <div class="empty-state py-4"><i class="bi bi-bell-slash"></i> No notifications yet.</div>
+  {% endfor %}
+</div>
+
+{% if page.has_other_pages %}
+  <nav class="mt-3">
+    <ul class="pagination">
+      {% if page.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page.previous_page_number }}">Previous</a></li>{% endif %}
+      <li class="page-item disabled"><span class="page-link">Page {{ page.number }} of {{ page.paginator.num_pages }}</span></li>
+      {% if page.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page.next_page_number }}">Next</a></li>{% endif %}
+    </ul>
+  </nav>
+{% endif %}
+{% endblock %}

@@ -99,6 +99,36 @@
 
         {% if user.is_authenticated %}
           <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary position-relative" type="button"
+                    data-bs-toggle="dropdown" aria-expanded="false" aria-label="Notifications">
+              <i class="bi bi-bell"></i>
+              {% if nav_notifications_unread_count %}
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                  {{ nav_notifications_unread_count }}
+                </span>
+              {% endif %}
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow" style="min-width:320px">
+              <li class="dropdown-header">Notifications</li>
+              {% for n in nav_notifications %}
+                <li>
+                  <a class="dropdown-item small {% if not n.is_read %}fw-semibold{% endif %}"
+                     href="{% if n.correspondence_id %}{% url 'correspondence_detail' n.correspondence_id %}{% else %}{% url 'notification_list' %}{% endif %}">
+                    {{ n.message }}
+                    <div class="muted small fw-normal">{{ n.created_at|date:"Y-m-d H:i" }}</div>
+                  </a>
+                </li>
+              {% empty %}
+                <li><span class="dropdown-item-text small muted">No notifications yet.</span></li>
+              {% endfor %}
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item small text-center" href="{% url 'notification_list' %}">View all</a></li>
+            </ul>
+          </div>
+        {% endif %}
+
+        {% if user.is_authenticated %}
+          <div class="dropdown">
             <button class="btn btn-sm btn-light dropdown-toggle d-flex align-items-center gap-2" type="button"
                     data-bs-toggle="dropdown" aria-expanded="false">
               <span class="avatar">{{ user.get_username|slice:":2" }}</span>

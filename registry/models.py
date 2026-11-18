@@ -204,6 +204,40 @@ class AuditLog(models.Model):
         ordering = ["-created_at"]
 
 
+class Notification(models.Model):
+    """An in-app notice telling a user about a change to a correspondence record."""
+
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
+    correspondence = models.ForeignKey(Correspondence, null=True, on_delete=models.SET_NULL, related_name="notifications")
+    message = models.CharField(max_length=255)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.message
+
+
+def notify_users(message, correspondence=None, actor=None):
+    """Create a Notification for every active user except ``actor``.
+
+    Used alongside AuditLog entries so users see, inside the app, when a
+    correspondence record they care about has changed.
+    """
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    recipients = User.objects.filter(is_active=True)
+    if actor is not None:
+        recipients = recipients.exclude(pk=actor.pk)
+    Notification.objects.bulk_create([
+        Notification(recipient=user, correspondence=correspondence, message=message)
+        for user in recipients
+    ])
+
+
 def get_prefetch_latest_action():
     """Get a Prefetch object for the latest action of a Correspondence.
     
