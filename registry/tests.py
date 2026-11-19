@@ -879,6 +879,20 @@ class RegisterImportTests(TestCase):
         self.assertEqual(result.created, 2)
         self.assertEqual(Correspondence.objects.count(), 0)
 
+    def test_import_creates_collection_record_for_rows_with_a_collector(self):
+        """"Received/collected by" rows should also populate Collection history."""
+        from registry.models import CollectionRecord
+
+        parsed = parse_rows(rows_from_stream(self._workbook(self._sample_rows()), "register.xlsx"))
+        import_records(parsed, user=self.officer)
+
+        # Only the first sample row has a "RECEIVED/COLLECTED BY" value.
+        self.assertEqual(CollectionRecord.objects.count(), 1)
+        collection = CollectionRecord.objects.get()
+        self.assertEqual(collection.collected_by, "Mr. Newland")
+        self.assertEqual(collection.collection_date, date(2021, 4, 9))
+        self.assertEqual(collection.correspondence.sender, "Mr. Stephenson")
+
     def test_skip_existing_ignores_rows_already_registered(self):
         rows = self._sample_rows()
         parse_and_import = lambda: import_records(
@@ -952,6 +966,46 @@ class RegisterImportTests(TestCase):
         self.assertIn("Imported: 1", out.getvalue())
         item = Correspondence.objects.get()
         self.assertEqual(item.date_received_sent, date(2021, 4, 8))
+
+
+class BackfillCollectionRecordsCommandTests(TestCase):
+    """The backfill command adds Collection history entries for older imports
+    that predate automatic CollectionRecord creation during import."""
+
+    def test_creates_entries_only_for_records_missing_one(self):
+        from registry.models import CollectionRecord
+
+        with_collector_no_record = Correspondence.objects.create(
+            received_collected_by="Mr. Newland",
+            date_received_collected=date(2021, 4, 9),
+        )
+        with_collector_has_record = Correspondence.objects.create(
+            received_collected_by="Ms. Green",
+            date_received_collected=date(2021, 5, 1),
+        )
+        CollectionRecord.objects.create(
+            correspondence=with_collector_has_record, collected_by="Ms. Green",
+            collection_date=date(2021, 5, 1),
+        )
+        Correspondence.objects.create(received_collected_by="")
+
+        out = StringIO()
+        call_command("backfill_collection_records", stdout=out)
+
+        self.assertIn("Created 1 collection record", out.getvalue())
+        self.assertEqual(CollectionRecord.objects.count(), 2)
+        new_record = CollectionRecord.objects.get(correspondence=with_collector_no_record)
+        self.assertEqual(new_record.collected_by, "Mr. Newland")
+        self.assertEqual(new_record.collection_date, date(2021, 4, 9))
+
+    def test_dry_run_does_not_save_anything(self):
+        from registry.models import CollectionRecord
+
+        Correspondence.objects.create(received_collected_by="Mr. Newland")
+        out = StringIO()
+        call_command("backfill_collection_records", "--dry-run", stdout=out)
+        self.assertIn("Would create 1 collection record", out.getvalue())
+        self.assertEqual(CollectionRecord.objects.count(), 0)
 
 
 class CorrespondenceDeleteTests(TestCase):
