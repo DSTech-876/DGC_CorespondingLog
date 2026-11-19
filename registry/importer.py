@@ -16,8 +16,9 @@ from pathlib import Path
 from uuid import uuid4
 
 from django.db import transaction
+from django.utils import timezone
 
-from .models import Correspondence
+from .models import CollectionRecord, Correspondence
 
 #: Register column -> spreadsheet headings that may carry it.
 ALIASES = {
@@ -319,6 +320,7 @@ def import_records(parsed, *, user=None, direction=Correspondence.Direction.OTHE
     flag_duplicates(parsed)
     result = ImportResult(dry_run=dry_run)
     pending = []
+    pending_records = []
 
     def flush():
         if not pending:
@@ -327,7 +329,29 @@ def import_records(parsed, *, user=None, direction=Correspondence.Direction.OTHE
         for item in created:
             item.reference_id = f"COR-{item.created_at:%Y}-{item.pk:06d}"
         Correspondence.objects.bulk_update(created, ["reference_id"], batch_size=batch_size)
+
+        # The "RECEIVED/COLLECTED BY" and "DATE RECEIVED/COLLECTED BY" columns
+        # also feed the Collection history panel shown on the detail page, so
+        # an imported row with a collector on file gets a matching entry.
+        collection_records = [
+            CollectionRecord(
+                correspondence=corr,
+                collected_by=record.values["received_collected_by"],
+                collection_date=(
+                    record.values.get("date_received_collected")
+                    or record.values.get("date_received_sent")
+                    or timezone.localdate()
+                ),
+                recorded_by=user,
+            )
+            for corr, record in zip(created, pending_records)
+            if record.values.get("received_collected_by")
+        ]
+        if collection_records:
+            CollectionRecord.objects.bulk_create(collection_records, batch_size=batch_size)
+
         pending.clear()
+        pending_records.clear()
 
     with transaction.atomic():
         for record in parsed.records:
@@ -350,6 +374,7 @@ def import_records(parsed, *, user=None, direction=Correspondence.Direction.OTHE
                     **record.values,
                 )
             )
+            pending_records.append(record)
             if len(pending) >= batch_size:
                 flush()
         flush()

@@ -70,6 +70,16 @@ python manage.py import_register /path/to/register.xlsx --skip-existing
 
 Use a database backup before importing. The import does not guess direction or transform ambiguous values. It will not import section labels such as YEAR 2021 or APRIL. Dates that cannot be read (for example `22-23/9/2025`) are left blank on the record, reported as warnings, and preserved verbatim in `original_row`.
 
+Imported rows that have a "Received/Collected By" value also get a matching entry in the record's Collection history (shown on the detail page), using the "Date Received/Collected By" column, or the received/sent date as a fallback.
+
+### Backfilling Collection history for older imports
+Correspondence imported before this feature existed has no Collection history entry yet, even though the "Received / collected by" and "Date collected" fields are set. Run this once per environment to add the missing entries:
+```
+python manage.py backfill_collection_records --dry-run
+python manage.py backfill_collection_records
+```
+It only creates an entry for records that have a collector on file and don't already have one, so it is safe to re-run.
+
 ## Seeding the first administrator
 `python manage.py seed_admin` creates the initial superuser without an interactive prompt and is safe to re-run. It reads `DJANGO_SUPERUSER_USERNAME` (default `admin`), `DJANGO_SUPERUSER_EMAIL` and `DJANGO_SUPERUSER_PASSWORD`, or the matching `--username`, `--email` and `--password` options. When no password is supplied, a strong one is generated and printed once — store it securely and change it after the first sign in. If the account already exists, the command restores superuser/staff/active privileges and leaves the password alone unless `--reset-password` is given:
 ```
