@@ -196,7 +196,7 @@ class Action(models.Model):
 
 class CollectionRecord(models.Model):
     correspondence = models.ForeignKey(Correspondence, on_delete=models.CASCADE, related_name="collection_records")
-    collected_by = models.CharField(max_length=255)
+    collected_by = models.TextField()
     collection_date = models.DateField(default=timezone.localdate)
     notes = models.TextField(blank=True)
     recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
