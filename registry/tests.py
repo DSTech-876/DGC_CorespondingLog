@@ -16,7 +16,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from registry.importer import import_records, parse_rows, rows_from_stream
-from registry.models import Action, AuditLog, Branch, Correspondence, Notification, Position, UserProfile
+from registry.models import Action, AuditLog, Branch, CollectionRecord, Correspondence, Notification, Position, UserProfile
 from registry.roles import apply_role
 
 
@@ -1099,3 +1099,31 @@ class NotificationTests(TestCase):
         self.client.force_login(self.actor)
         self.client.post(reverse("notification_mark_all_read"))
         self.assertEqual(Notification.objects.filter(recipient=self.actor, is_read=False).count(), 0)
+
+class CollectionHistoryFallbackTests(TestCase):
+    """Covers the collection_history property added for the register fallback."""
+
+    def test_falls_back_to_register_fields_when_no_collection_record(self):
+        item = Correspondence.objects.create(
+            received_collected_by="DEWAN",
+            date_received_collected=date(2026, 11, 19),
+        )
+        history = item.collection_history
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["collected_by"], "DEWAN")
+        self.assertEqual(history[0]["collection_date"], date(2026, 11, 19))
+        self.assertTrue(history[0]["from_register"])
+
+    def test_prefers_explicit_collection_records_over_register_fields(self):
+        item = Correspondence.objects.create(
+            received_collected_by="DEWAN",
+            date_received_collected=date(2026, 11, 19),
+        )
+        CollectionRecord.objects.create(correspondence=item, collected_by="JANE", collection_date=date(2026, 11, 20))
+        history = item.collection_history
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0].collected_by, "JANE")
+
+    def test_empty_when_nothing_recorded(self):
+        item = Correspondence.objects.create()
+        self.assertEqual(item.collection_history, [])
