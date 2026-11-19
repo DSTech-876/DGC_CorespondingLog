@@ -140,6 +140,27 @@ class Correspondence(models.Model):
             latest_action = self.actions.first()
         return latest_action.action_text if latest_action else ""
 
+    @property
+    def collection_history(self):
+        """Entries for the detail page's "Collection history" panel.
+
+        Returns the explicit CollectionRecord entries when there are any.
+        Otherwise, falls back to the collector info captured on the register
+        itself (received_collected_by / date_received_collected) — this
+        covers correspondence that already has that data (e.g. imported
+        before a stand-alone collection record was ever logged) so it still
+        shows up here without needing to be re-entered.
+        """
+        records = list(self.collection_records.all())
+        if not records and self.received_collected_by:
+            records.append({
+                "collected_by": self.received_collected_by,
+                "collection_date": self.date_received_collected,
+                "notes": "",
+                "from_register": True,
+            })
+        return records
+
 class Branch(models.Model):
     """Admin-managed list of branches offered in the From/To branch dropdowns."""
 

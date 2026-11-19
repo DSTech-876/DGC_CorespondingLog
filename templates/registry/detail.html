@@ -128,10 +128,10 @@
 
     <div class="card p-4 mt-3">
       <h2 class="h6 mb-3"><i class="bi bi-inboxes me-1"></i> Collection history</h2>
-      {% for c in item.collection_records.all %}
+      {% for c in item.collection_history %}
         <div class="timeline-item">
-          <div class="muted small">{{ c.collection_date }}</div>
-          <div class="small fw-semibold">{{ c.collected_by }}</div>
+          <div class="muted small">{{ c.collection_date|default:"—" }}</div>
+          <div class="small fw-semibold">{{ c.collected_by }}{% if c.from_register %} <span class="badge bg-light text-muted border fw-normal">from register details</span>{% endif %}</div>
           {% if c.notes %}<div class="muted small">{{ c.notes|linebreaksbr }}</div>{% endif %}
         </div>
       {% empty %}
