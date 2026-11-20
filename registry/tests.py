@@ -858,14 +858,38 @@ class ActionDirectiveDropdownTests(TestCase):
         self.assertEqual(action.comment, "")
 
     def test_legacy_action_text_value_appears_in_edit_form(self):
-        """Legacy free-text action_text not in the lookup table should still appear as an option."""
+        """Legacy free-text action_text not in the lookup table should still appear as an option in the form."""
         action = Action.objects.create(
             correspondence=self.item,
             action_text="Legacy directive text",
+            action_date=date.today(),
+            status=Action.Status.OPEN,
         )
         self.client.force_login(self.officer)
+        # Check that the legacy value appears on the detail page
         response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
         self.assertContains(response, "Legacy directive text")
+        
+        # Check that the legacy value appears in the edit form choices
+        response = self.client.get(reverse("action_edit", args=[action.pk]))
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        choices = dict(form.fields["action_text"].widget.choices)
+        self.assertIn("Legacy directive text", choices)
+        
+        # Verify we can edit to a different legacy value and it saves
+        response = self.client.post(
+            reverse("action_edit", args=[action.pk]),
+            {
+                "action_text": "Different legacy value",
+                "action_date": str(date.today()),
+                "status": Action.Status.OPEN,
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        action.refresh_from_db()
+        self.assertEqual(action.action_text, "Different legacy value")
 
     def test_comment_displayed_on_detail_page(self):
         Action.objects.create(
