@@ -157,6 +157,17 @@ class ActionForm(BootstrapFormMixin, forms.ModelForm):
         action_text_choices = [("", "---------")] + [(name, name) for name in sorted(directive_names)]
         self.fields["action_text"].widget.choices = action_text_choices
 
+    def clean_action_text(self):
+        """Accept any submitted action_text value for backward compatibility with legacy free-text entries.
+        
+        The choices in the dropdown show managed ActionDirective entries plus the current instance value,
+        but we allow any submitted value to preserve historical data and support existing edits that may
+        use different legacy free-text values.
+        """
+        # Note: Don't call super().clean_action_text() as the parent ChoiceField would validate
+        # that the value is in choices. Instead, just return the submitted value as-is.
+        return self.cleaned_data.get("action_text", "")
+
     def save(self, commit=True):
         instance = super().save(commit=False)
         if not instance.action_date:
