@@ -4,7 +4,7 @@ from django import forms
 from django.utils import timezone
 
 from .importer import SUPPORTED_SUFFIXES
-from .models import Correspondence, Attachment, Action, CollectionRecord, Branch, Position
+from .models import Correspondence, Attachment, Action, CollectionRecord, Branch, Position, ActionDirective
 
 
 class BootstrapFormMixin:
@@ -128,9 +128,10 @@ class AttachmentForm(BootstrapFormMixin, forms.ModelForm):
 class ActionForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Action
-        fields = ["action_text", "action_date", "status"]
+        fields = ["action_text", "comment", "action_date", "status"]
         widgets = {
-            "action_text": forms.Textarea(attrs={"rows": 2, "placeholder": "Directive or action taken"}),
+            "action_text": forms.Select(),
+            "comment": forms.Textarea(attrs={"rows": 2, "placeholder": "Additional notes (optional)"}),
             "action_date": forms.DateInput(attrs={"type": "date"}),
         }
 
@@ -144,6 +145,17 @@ class ActionForm(BootstrapFormMixin, forms.ModelForm):
             for field_name in ("action_text", "action_date", "status"):
                 self.fields[field_name].required = False
         self.fields["status"].choices = [("", "---------")] + list(Action.Status.choices)
+
+        # Build the action_text dropdown from the admin-managed list, including
+        # the current value if it exists and isn't (yet) in the managed list —
+        # mirrors the Branch/Position dropdown pattern so legacy free-text
+        # entries stay selectable instead of silently disappearing.
+        managed_directives = {d.name for d in ActionDirective.objects.all()}
+        directive_names = set(managed_directives)
+        if self.instance and self.instance.pk and self.instance.action_text:
+            directive_names.add(self.instance.action_text)
+        action_text_choices = [("", "---------")] + [(name, name) for name in sorted(directive_names)]
+        self.fields["action_text"].widget.choices = action_text_choices
 
     def save(self, commit=True):
         instance = super().save(commit=False)

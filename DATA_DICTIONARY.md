@@ -27,6 +27,8 @@ Additional application fields:
 Branch and Position are simple admin-managed lookup lists (name only) that populate the From/To branch and position dropdowns on the Correspondence form; administrators add or edit entries from the Django admin.
 
 Actions & directives (the `Action` model) record the directive text, its date and status — no From/To fields:
+- action_text: chosen from the admin-managed `ActionDirective` lookup list (a dropdown, like Branch/Position), falling back to showing legacy free-text values that aren't in the list so existing data stays selectable
+- comment: optional free-text notes attached to that specific action/directive entry
 - status: open / pending / completed / closed — completed actions are shown with a verified checkmark icon, closed actions with a plain close icon, pending actions with a clock icon. Existing actions can be edited (including status) by users with the `change_action` permission.
 
 The supplied workbook repeats the `FROM` and `TO` headings. The import maps the first pair to `sender`/`recipient`, falling back to the later pair only when the first is blank; the repeated columns are kept in `original_row` as `FROM (2)` and `TO (2)` until their meaning is confirmed.

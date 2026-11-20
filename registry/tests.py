@@ -16,7 +16,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from registry.importer import import_records, parse_rows, rows_from_stream
-from registry.models import Action, AuditLog, Branch, CollectionRecord, Correspondence, Notification, Position, UserProfile
+from registry.models import Action, ActionDirective, AuditLog, Branch, CollectionRecord, Correspondence, Notification, Position, UserProfile
 from registry.roles import apply_role
 
 
@@ -805,6 +805,77 @@ class BranchPositionDropdownTests(TestCase):
         self.assertEqual(item.recipient_branch, "Legacy Branch")
         self.assertEqual(item.recipient_position, "Legacy Position")
         self.assertEqual(item.recipient, "Old Recipient - Updated")
+
+
+class ActionDirectiveDropdownTests(TestCase):
+    """Admin-managed ActionDirective list populates the action_text dropdown, with a free-text comment."""
+
+    def setUp(self):
+        self.officer = get_user_model().objects.create_user("officer7", password="pass12345!")
+        apply_role(self.officer, UserProfile.Role.OFFICER)
+        self.item = Correspondence.objects.create(sender="A", recipient="B")
+        ActionDirective.objects.create(name="For comment")
+        ActionDirective.objects.create(name="For approval")
+
+    def test_action_form_offers_directive_choices(self):
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
+        form = response.context["action_form"]
+        self.assertIn(("For comment", "For comment"), form.fields["action_text"].widget.choices)
+        self.assertIn(("For approval", "For approval"), form.fields["action_text"].widget.choices)
+
+    def test_officer_can_add_action_with_dropdown_value_and_comment(self):
+        self.client.force_login(self.officer)
+        response = self.client.post(
+            reverse("action_add", args=[self.item.pk]),
+            {
+                "action_text": "For approval",
+                "comment": "Needs the director's sign-off first.",
+                "action_date": date.today(),
+                "status": Action.Status.OPEN,
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        action = Action.objects.get(correspondence=self.item)
+        self.assertEqual(action.action_text, "For approval")
+        self.assertEqual(action.comment, "Needs the director's sign-off first.")
+
+    def test_comment_is_optional(self):
+        self.client.force_login(self.officer)
+        response = self.client.post(
+            reverse("action_add", args=[self.item.pk]),
+            {
+                "action_text": "For comment",
+                "comment": "",
+                "action_date": date.today(),
+                "status": Action.Status.OPEN,
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        action = Action.objects.get(correspondence=self.item)
+        self.assertEqual(action.comment, "")
+
+    def test_legacy_action_text_value_appears_in_edit_form(self):
+        """Legacy free-text action_text not in the lookup table should still appear as an option."""
+        action = Action.objects.create(
+            correspondence=self.item,
+            action_text="Legacy directive text",
+        )
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
+        self.assertContains(response, "Legacy directive text")
+
+    def test_comment_displayed_on_detail_page(self):
+        Action.objects.create(
+            correspondence=self.item,
+            action_text="For approval",
+            comment="Escalated to the branch head.",
+        )
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
+        self.assertContains(response, "Escalated to the branch head.")
 
 
 class RegisterImportTests(TestCase):

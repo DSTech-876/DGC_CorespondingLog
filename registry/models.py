@@ -185,6 +185,18 @@ class Position(models.Model):
         return self.name
 
 
+class ActionDirective(models.Model):
+    """Admin-managed list of action/directive texts offered in the Actions & directives dropdown."""
+
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class Attachment(models.Model):
     correspondence = models.ForeignKey(Correspondence, on_delete=models.CASCADE, related_name="attachments")
     file = models.FileField(upload_to="correspondence/%Y/%m/")
@@ -207,6 +219,7 @@ class Action(models.Model):
 
     correspondence = models.ForeignKey(Correspondence, on_delete=models.CASCADE, related_name="actions")
     action_text = models.TextField()
+    comment = models.TextField(blank=True, help_text="Additional notes about this action/directive.")
     action_date = models.DateField(default=timezone.localdate)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
     entered_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
