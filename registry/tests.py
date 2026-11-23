@@ -1104,25 +1104,42 @@ class BackfillCollectionRecordsCommandTests(TestCase):
 
 
 class CorrespondenceDeleteTests(TestCase):
-    """Only admins can delete correspondence; deletion is audited and notified."""
+    """Admins and records officers can delete correspondence; deletion is audited and notified."""
 
     def setUp(self):
         self.admin = get_user_model().objects.create_user("deladmin", password="pass12345!")
         apply_role(self.admin, UserProfile.Role.ADMIN)
         self.officer = get_user_model().objects.create_user("delofficer", password="pass12345!")
         apply_role(self.officer, UserProfile.Role.OFFICER)
+        self.viewer = get_user_model().objects.create_user("delviewer", password="pass12345!")
+        apply_role(self.viewer, UserProfile.Role.VIEWER)
         self.item = Correspondence.objects.create(sender="A", recipient="B", description="Needs removal")
 
-    def test_officer_cannot_delete(self):
-        self.client.force_login(self.officer)
+    def test_viewer_cannot_delete(self):
+        self.client.force_login(self.viewer)
         response = self.client.post(reverse("correspondence_delete", args=[self.item.pk]))
         self.assertEqual(response.status_code, 403)
         self.assertTrue(Correspondence.objects.filter(pk=self.item.pk).exists())
 
-    def test_officer_is_not_offered_delete_button(self):
-        self.client.force_login(self.officer)
+    def test_viewer_is_not_offered_delete_button(self):
+        self.client.force_login(self.viewer)
         response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
         self.assertNotContains(response, reverse("correspondence_delete", args=[self.item.pk]))
+
+    def test_officer_sees_delete_button(self):
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
+        self.assertContains(response, reverse("correspondence_delete", args=[self.item.pk]))
+
+    def test_officer_can_delete_and_it_is_audited(self):
+        reference_id = self.item.reference_id
+        self.client.force_login(self.officer)
+        response = self.client.post(reverse("correspondence_delete", args=[self.item.pk]))
+        self.assertRedirects(response, reverse("correspondence_list"))
+        self.assertFalse(Correspondence.objects.filter(pk=self.item.pk).exists())
+        log = AuditLog.objects.get(event="Deleted")
+        self.assertEqual(log.user, self.officer)
+        self.assertIn(reference_id, log.details)
 
     def test_admin_sees_delete_button(self):
         self.client.force_login(self.admin)
