@@ -97,7 +97,7 @@ Every account has a registry role that maps to a Django permission group, applie
 | Role | Can do |
 | --- | --- |
 | Viewer | Read the register, open records, use search and filters |
-| Records officer | Everything a viewer can, plus register and edit correspondence, upload attachments, add actions and collection entries, export CSV |
+| Records officer | Everything a viewer can, plus register, edit and delete correspondence, upload attachments, add actions and collection entries, export CSV |
 | Administrator | Everything above, plus user management and the Django admin site |
 
 Roles are defined in `registry/roles.py`; adding a permission there and re-saving a user re-applies the group. Views are gated on the underlying permissions, so a viewer who reaches a write URL directly receives `403 Forbidden`.

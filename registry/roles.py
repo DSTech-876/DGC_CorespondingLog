@@ -20,6 +20,7 @@ ROLE_GROUPS = {
     Role.OFFICER: (
         "Records officers",
         ["registry.view_correspondence", "registry.add_correspondence", "registry.change_correspondence",
+         "registry.delete_correspondence",
          "registry.view_attachment", "registry.add_attachment",
          "registry.view_action", "registry.add_action", "registry.change_action",
          "registry.view_collectionrecord", "registry.add_collectionrecord",
@@ -34,7 +35,7 @@ ROLE_GROUPS = {
 
 ROLE_DESCRIPTIONS = {
     Role.VIEWER: "Read-only access to the correspondence register.",
-    Role.OFFICER: "Register and update correspondence, upload attachments and export CSV.",
+    Role.OFFICER: "Register, update and delete correspondence, upload attachments and export CSV.",
     Role.ADMIN: "Full access, including user management and the Django admin site.",
 }
 
