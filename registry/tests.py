@@ -1255,6 +1255,86 @@ class CorrespondenceDuplicateTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(Correspondence.objects.count(), 1)
 
+    def test_legacy_branch_position_values_preserved_in_duplicate_form(self):
+        """Legacy branch/position values should appear in the duplicate form's dropdown choices."""
+        self.client.force_login(self.officer)
+        # Create a correspondence with legacy values not in the Branch/Position tables
+        source = Correspondence.objects.create(
+            direction=Correspondence.Direction.INCOMING,
+            sender="Legacy Sender",
+            sender_branch="Old Branch",  # Not in Branch table
+            sender_position="Old Position",  # Not in Position table
+            recipient="Legacy Recipient",
+            recipient_branch="Legacy Branch",  # Not in Branch table
+            recipient_position="Legacy Position",  # Not in Position table
+            description="Legacy record with custom branches/positions",
+        )
+        
+        # Load the duplicate form for this correspondence
+        response = self.client.get(reverse("correspondence_duplicate", args=[source.pk]))
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        
+        # Verify that legacy values are included in the dropdown choices
+        branch_choices = form.fields["sender_branch"].widget.choices
+        position_choices = form.fields["sender_position"].widget.choices
+        branch_choices_recipient = form.fields["recipient_branch"].widget.choices
+        position_choices_recipient = form.fields["recipient_position"].widget.choices
+        
+        # Check that legacy values are in the choices
+        branch_choice_values = [val for val, label in branch_choices]
+        self.assertIn("Old Branch", branch_choice_values, "Legacy sender_branch should be in duplicate form choices")
+        self.assertIn("Legacy Branch", branch_choice_values, "Legacy recipient_branch should be in duplicate form choices")
+        
+        position_choice_values = [val for val, label in position_choices]
+        self.assertIn("Old Position", position_choice_values, "Legacy sender_position should be in duplicate form choices")
+        
+        position_choice_values_recipient = [val for val, label in position_choices_recipient]
+        self.assertIn("Legacy Position", position_choice_values_recipient, "Legacy recipient_position should be in duplicate form choices")
+
+    def test_posting_duplicate_with_legacy_values_preserves_them(self):
+        """When duplicating a record with legacy dropdown values, those values should be preserved on submit."""
+        self.client.force_login(self.officer)
+        # Create a correspondence with legacy values not in the Branch/Position tables
+        source = Correspondence.objects.create(
+            direction=Correspondence.Direction.INCOMING,
+            sender="Legacy Sender",
+            sender_branch="Old Branch",
+            sender_position="Old Position",
+            recipient="Legacy Recipient",
+            recipient_branch="Legacy Branch",
+            recipient_position="Legacy Position",
+            description="Legacy record",
+        )
+        
+        initial_count = Correspondence.objects.count()
+        
+        # Submit the duplicate form with legacy values preserved
+        response = self.client.post(
+            reverse("correspondence_duplicate", args=[source.pk]),
+            {
+                "direction": Correspondence.Direction.INCOMING,
+                "origin": Correspondence.Origin.OTHER,
+                "sender": "Legacy Sender",
+                "sender_branch": "Old Branch",
+                "sender_position": "Old Position",
+                "recipient": "Legacy Recipient",
+                "recipient_branch": "Legacy Branch",
+                "recipient_position": "Legacy Position",
+                "description": "Duplicated legacy record",
+            },
+        )
+        
+        self.assertEqual(Correspondence.objects.count(), initial_count + 1)
+        new_item = Correspondence.objects.exclude(pk=source.pk).exclude(pk=self.item.pk).get()
+        
+        # Verify that legacy values were preserved in the new record
+        self.assertEqual(new_item.sender_branch, "Old Branch")
+        self.assertEqual(new_item.sender_position, "Old Position")
+        self.assertEqual(new_item.recipient_branch, "Legacy Branch")
+        self.assertEqual(new_item.recipient_position, "Legacy Position")
+
+
 
 class NotificationTests(TestCase):
     """Users are notified in-app when correspondence changes."""
