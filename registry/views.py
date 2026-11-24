@@ -108,7 +108,7 @@ def correspondence_duplicate(request, pk):
         # created_by, created_at, updated_at and original_row, so those are
         # regenerated fresh rather than copied from the source.
         initial = model_to_dict(source)
-        form = CorrespondenceForm(initial=initial)
+        form = CorrespondenceForm(initial=initial, instance=source)
     return render(request, "registry/form.html", {
         "form": form,
         "title": f"Duplicate {source.reference_id}",
