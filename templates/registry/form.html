@@ -6,7 +6,7 @@
 <div class="page-header">
   <div>
     <h1>{{ title }}</h1>
-    <p class="subtitle">Fields mirror the original correspondence register columns.</p>
+    <p class="subtitle">{{ subtitle|default:"Fields mirror the original correspondence register columns." }}</p>
   </div>
   <a class="btn btn-outline-secondary" href="{% url 'correspondence_list' %}"><i class="bi bi-arrow-left me-1"></i> Back to register</a>
 </div>

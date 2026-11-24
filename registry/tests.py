@@ -1169,6 +1169,93 @@ class CorrespondenceDeleteTests(TestCase):
         self.assertTrue(Correspondence.objects.filter(pk=self.item.pk).exists())
 
 
+class CorrespondenceDuplicateTests(TestCase):
+    """Duplicating a record pre-fills a new, editable form instead of copying it outright."""
+
+    def setUp(self):
+        self.officer = get_user_model().objects.create_user("dupofficer", password="pass12345!")
+        apply_role(self.officer, UserProfile.Role.OFFICER)
+        self.viewer = get_user_model().objects.create_user("dupviewer", password="pass12345!")
+        apply_role(self.viewer, UserProfile.Role.VIEWER)
+        self.item = Correspondence.objects.create(
+            direction=Correspondence.Direction.INCOMING,
+            sender="Jane Doe",
+            recipient="John Smith",
+            description="Original letter",
+        )
+
+    def test_viewer_cannot_open_the_duplicate_form(self):
+        self.client.force_login(self.viewer)
+        response = self.client.get(reverse("correspondence_duplicate", args=[self.item.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_viewer_is_not_offered_duplicate_button(self):
+        self.client.force_login(self.viewer)
+        response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
+        self.assertNotContains(response, reverse("correspondence_duplicate", args=[self.item.pk]))
+
+    def test_officer_sees_duplicate_button(self):
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_detail", args=[self.item.pk]))
+        self.assertContains(response, reverse("correspondence_duplicate", args=[self.item.pk]))
+
+    def test_get_pre_fills_form_with_source_data(self):
+        self.client.force_login(self.officer)
+        response = self.client.get(reverse("correspondence_duplicate", args=[self.item.pk]))
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertEqual(form.initial["sender"], "Jane Doe")
+        self.assertEqual(form.initial["recipient"], "John Smith")
+        self.assertEqual(form.initial["description"], "Original letter")
+        # The source record isn't touched by merely opening the form.
+        self.assertEqual(Correspondence.objects.count(), 1)
+
+    def test_posting_edited_data_creates_a_new_record(self):
+        self.client.force_login(self.officer)
+        response = self.client.post(
+            reverse("correspondence_duplicate", args=[self.item.pk]),
+            {
+                "direction": Correspondence.Direction.OUTGOING,
+                "origin": Correspondence.Origin.OTHER,
+                "sender": "Jane Doe",
+                "recipient": "John Smith Jr.",
+                "description": "Follow-up letter",
+            },
+        )
+        self.assertEqual(Correspondence.objects.count(), 2)
+        new_item = Correspondence.objects.exclude(pk=self.item.pk).get()
+        self.assertEqual(new_item.recipient, "John Smith Jr.")
+        self.assertEqual(new_item.description, "Follow-up letter")
+        self.assertEqual(new_item.direction, Correspondence.Direction.OUTGOING)
+        self.assertEqual(new_item.created_by, self.officer)
+        self.assertNotEqual(new_item.reference_id, self.item.reference_id)
+        self.assertRedirects(response, reverse("correspondence_detail", args=[new_item.pk]))
+
+    def test_duplication_is_audited_and_references_the_source(self):
+        self.client.force_login(self.officer)
+        self.client.post(
+            reverse("correspondence_duplicate", args=[self.item.pk]),
+            {
+                "direction": Correspondence.Direction.OUTGOING,
+                "origin": Correspondence.Origin.OTHER,
+                "sender": "Jane Doe",
+                "recipient": "John Smith Jr.",
+                "description": "Follow-up letter",
+            },
+        )
+        log = AuditLog.objects.get(event="Created", details__icontains="Duplicated")
+        self.assertIn(self.item.reference_id, log.details)
+
+    def test_viewer_cannot_post_a_duplicate(self):
+        self.client.force_login(self.viewer)
+        response = self.client.post(
+            reverse("correspondence_duplicate", args=[self.item.pk]),
+            {"sender": "X", "recipient": "Y"},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Correspondence.objects.count(), 1)
+
+
 class NotificationTests(TestCase):
     """Users are notified in-app when correspondence changes."""
 

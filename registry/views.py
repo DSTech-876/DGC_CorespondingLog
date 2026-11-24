@@ -9,6 +9,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.core.paginator import Paginator
 from django.db.models import Q, Count
 from django.http import HttpResponse, HttpResponseForbidden
+from django.forms.models import model_to_dict
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from .models import Correspondence, AuditLog, Attachment, Action, Notification, get_prefetch_latest_action, notify_users
@@ -82,6 +83,37 @@ def correspondence_edit(request, pk):
         messages.success(request, "Record updated.")
         return redirect("correspondence_detail", pk=item.pk)
     return render(request, "registry/form.html", {"form": form, "title": "Edit correspondence"})
+
+@login_required
+@permission_required("registry.add_correspondence", raise_exception=True)
+def correspondence_duplicate(request, pk):
+    source = get_object_or_404(Correspondence, pk=pk)
+    if request.method == "POST":
+        form = CorrespondenceForm(request.POST)
+        if form.is_valid():
+            item = form.save(commit=False)
+            item.pk = None  # ensure a brand-new row, not an update to the source
+            item.created_by = request.user
+            item.save()
+            AuditLog.objects.create(
+                user=request.user, correspondence=item, event="Created",
+                details=f"Duplicated from {source.reference_id}",
+            )
+            notify_users(f"{item.reference_id} was registered by {request.user.get_username()} (duplicated from {source.reference_id}).", correspondence=item, actor=request.user)
+            messages.success(request, f"Duplicated {source.reference_id} as {item.reference_id}.")
+            return redirect("correspondence_detail", pk=item.pk)
+    else:
+        # Copy the source record's data as initial values for a new, unsaved
+        # record. The form's own field list already excludes reference_id,
+        # created_by, created_at, updated_at and original_row, so those are
+        # regenerated fresh rather than copied from the source.
+        initial = model_to_dict(source)
+        form = CorrespondenceForm(initial=initial)
+    return render(request, "registry/form.html", {
+        "form": form,
+        "title": f"Duplicate {source.reference_id}",
+        "subtitle": "Review and edit the copied details, then save to create a new record.",
+    })
 
 @login_required
 @permission_required("registry.delete_correspondence", raise_exception=True)
