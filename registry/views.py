@@ -9,7 +9,6 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.core.paginator import Paginator
 from django.db.models import Q, Count
 from django.http import HttpResponse, HttpResponseForbidden
-from django.forms.models import model_to_dict
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from .models import Correspondence, AuditLog, Attachment, Action, Notification, get_prefetch_latest_action, notify_users
@@ -104,11 +103,12 @@ def correspondence_duplicate(request, pk):
             return redirect("correspondence_detail", pk=item.pk)
     else:
         # Copy the source record's data as initial values for a new, unsaved
-        # record. The form's own field list already excludes reference_id,
-        # created_by, created_at, updated_at and original_row, so those are
-        # regenerated fresh rather than copied from the source.
-        initial = model_to_dict(source)
-        form = CorrespondenceForm(initial=initial)
+        # record. Pass instance=source so the form includes unmanaged (legacy)
+        # branch and position values in the dropdown choices. The form's own
+        # field list already excludes reference_id, created_by, created_at,
+        # updated_at and original_row, so those are regenerated fresh rather
+        # than copied from the source.
+        form = CorrespondenceForm(instance=source)
     return render(request, "registry/form.html", {
         "form": form,
         "title": f"Duplicate {source.reference_id}",
