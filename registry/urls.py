@@ -9,6 +9,7 @@ urlpatterns = [
     path("import/confirm/", views.register_import_confirm, name="register_import_confirm"),
     path("<int:pk>/", views.correspondence_detail, name="correspondence_detail"),
     path("<int:pk>/edit/", views.correspondence_edit, name="correspondence_edit"),
+    path("<int:pk>/duplicate/", views.correspondence_duplicate, name="correspondence_duplicate"),
     path("<int:pk>/delete/", views.correspondence_delete, name="correspondence_delete"),
     path("<int:pk>/attachments/add/", views.attachment_upload, name="attachment_upload"),
     path("<int:pk>/actions/add/", views.action_add, name="action_add"),
